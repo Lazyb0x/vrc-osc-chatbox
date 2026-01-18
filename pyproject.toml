@@ -1,0 +1,12 @@
+[project]
+name = "vrc-osc-chatbox"
+version = "0.1.0"
+description = "A simple command line chatbox input interface for VRChat using OSC."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "python-osc>=1.9.3",
+]
+
+[project.scripts]
+vrc-chatbox = "main:main"
