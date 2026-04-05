@@ -6,5 +6,15 @@ dist/
 wheels/
 *.egg-info
 
-# Virtual environments
+# environments
 .venv
+.vscode
+
+# logs
+logs/
+
+# staticfiles
+static/
+
+# configuration files
+config.yml
