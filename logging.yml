@@ -33,4 +33,6 @@ loggers:
     handlers: [console_handler, file_handler]
     propagate: false
   openai:
-    level: INFO
+    level: WARNING
+  httpx:
+    level: WARNING

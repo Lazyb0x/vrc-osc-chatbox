@@ -1,29 +1,27 @@
-from email import message
+import asyncio
 import json
 import logging
-from fastapi import FastAPI, Request
-from fastapi.websockets import WebSocket
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
-from starlette.websockets import WebSocketDisconnect
+
 import uvicorn
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.websockets import WebSocket
+from starlette.websockets import WebSocketDisconnect
 
 from vrcchatbox.config import Config
+from vrcchatbox.message import Message, MessageProcessor
 from vrcchatbox.osc_client import OSCClient
-from vrcchatbox.message import Message
 from vrcchatbox.utils.app_context import AppContext
 from vrcchatbox.utils.logger import get_log_config
 
 logger = logging.getLogger(__name__)
 
 
-def create_app(osc_ip: str, osc_port: int):
+def create_app(config: Config, osc_ip: str, osc_port: int):
     app = FastAPI()
     osc_client = OSCClient(osc_ip, osc_port)
-    config = Config()
-    config.load()
-    AppContext.add(config)
-    message_processor = Message(config=config)
+    message_processor = MessageProcessor(config=config)
 
     # ========== 全局异常处理器 ==========
 
@@ -47,18 +45,21 @@ def create_app(osc_ip: str, osc_port: int):
         while True:
             try:
                 msg_json = await websocket.receive_text()
-                text = json.loads(msg_json).get("data")
-                if text is None or text.strip() == "":
+                logger.debug(f"Received: {msg_json}")
+
+                message = Message.from_dict(json.loads(msg_json))
+                if message.data is None or message.data.strip() == "":
                     osc_client.chatbox_input("")
                     continue
-                escaped = text.replace("\n", "\\n")
-                logger.debug(f"Received: {escaped}")
-                
-                async for processed_text in message_processor.process(text):
-                    osc_client.chatbox_input(processed_text)
-                    response = json.dumps({"data": processed_text})
-                    await websocket.send_text(response)
-                
+
+                async def backgroud_task():
+                    async for processed_text in message_processor.process(message):
+                        osc_client.chatbox_input(processed_text)
+                        response = json.dumps({"data": processed_text})
+                        await websocket.send_text(response)
+
+                asyncio.create_task(backgroud_task())
+
             except WebSocketDisconnect:
                 break
 
@@ -68,6 +69,6 @@ def create_app(osc_ip: str, osc_port: int):
     return app
 
 
-def run_server(host, port, osc_ip: str, osc_port: int):
-    app = create_app(osc_ip, osc_port)
+def run_server(config: Config, host: str, port: int, osc_ip: str, osc_port: int):
+    app = create_app(config, osc_ip, osc_port)
     uvicorn.run(app, host=host, port=port, log_config=get_log_config())

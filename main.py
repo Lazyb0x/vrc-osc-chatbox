@@ -1,6 +1,10 @@
 import argparse
+import atexit
 
-from pythonosc import udp_client
+from vrcchatbox.config import Config
+from vrcchatbox.console import run_console
+from vrcchatbox.server import run_server
+from vrcchatbox.utils.logger import setup_logger
 
 
 def main():
@@ -9,35 +13,38 @@ def main():
     parser.add_argument(
         "--port", type=int, default=9000, help="The port the OSC server is listening on"
     )
+    parser.add_argument("--serve", action="store_true", help="Start server mode")
+    parser.add_argument("--console", action="store_true", help="Start console mode")
+    parser.add_argument(
+        "--server-ip",
+        default="0.0.0.0",
+        help="Server address",
+    )
+    parser.add_argument(
+        "--server-port",
+        default=8000,
+        type=int,
+        help="Server port",
+    )
+    parser.add_argument(
+        "--config",
+        default="config.yml",
+        help="Path to the YAML configuration file",
+    )
     args = parser.parse_args()
 
-    client = udp_client.SimpleUDPClient(args.ip, args.port)
+    # 初始化配置
+    config = Config(file_path=args.config)
+    config.load()
+    atexit.register(config.save)
+    setup_logger(config)
 
-    bypass_keyboard = True  # b
-    notify = True  # n
-
-    buffer = []
-    empty_count = 0
-    prompt = True
-
-    print("Enter message to send (or 'exit' to quit): ")
-    while True:
-        line = input("> " if prompt else "  ")
-        if line.lower() in ("exit", "quit", "/q"):
-            break
-
-        if line == "":
-            empty_count += 1
-            if empty_count >= 1:
-                msg = "\n".join(buffer)
-                buffer = []
-                empty_count = 0
-                prompt = True
-                client.send_message("/chatbox/input", [msg, bypass_keyboard, notify])
-        else:
-            buffer.append(line)
-            empty_count = 0
-            prompt = False
+    if not args.console:
+        host, port = args.server_ip, args.server_port
+        port = int(port)
+        run_server(config, host, port, args.ip, args.port)
+    else:
+        run_console(config, args.ip, args.port)
 
 
 if __name__ == "__main__":

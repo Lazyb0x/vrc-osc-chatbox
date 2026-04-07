@@ -1,12 +1,14 @@
 import asyncio
+import logging
 from dataclasses import dataclass
 from typing import AsyncGenerator, List, Type
-from urllib import response
 
 from langchain_openai import ChatOpenAI
 
 from vrcchatbox.agent import TranslateAgent
 from vrcchatbox.config import Config
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -59,7 +61,7 @@ class TranslateHandler(MsgHandler):
 
     order: int = 20
 
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, debounce_seconds: float = 1):
         if not config.translate.enable:
             raise ValueError("Translation is disabled in config.")
         if not config.translate.languages:
@@ -70,24 +72,35 @@ class TranslateHandler(MsgHandler):
             api_key=config.openai.api_key,
         )
         self.translate_config = config.translate
-
         self.agent = TranslateAgent(config)
-        pass
+        self._debounce_seconds = debounce_seconds
+        self._pending_task: asyncio.Task | None = None
 
     async def handle(self, ctx: MsgContext) -> HandlerResult:
         yield MsgContext(text=ctx.text)
         input_text = ctx.text
 
+        # 流式输入防抖
+        if self._pending_task and not self._pending_task.done():
+            self._pending_task.cancel()
+        self._pending_task = asyncio.create_task(self._debounced_translate(input_text))
+
         try:
-            translated_text: str = await self.agent.translate(input_text)
+            translated_text: str = await self._pending_task
+            yield MsgContext(text=f"{input_text}\n{translated_text}", is_end=True)
+        except asyncio.CancelledError:
+            return
         except Exception as e:
             yield MsgContext(
                 text=f"{input_text}\n[翻译接口错误，请检查模型信息是否配置正确: {str(e)}]",
                 is_end=True,
             )
             return
+        pass
 
-        yield MsgContext(text=f"{input_text}\n{translated_text}", is_end=True)
+    async def _debounced_translate(self, text: str) -> str:
+        await asyncio.sleep(self._debounce_seconds)
+        return await self.agent.translate(text)
 
 
 class Pipeline:

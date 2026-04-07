@@ -27,16 +27,19 @@ class TranslateConfig:
 
 
 class Config:
-    def __init__(self):
+    def __init__(self, file_path: str = "config.yml"):
         self.yaml = YAML()
         self.yaml.preserve_quotes = True
         self.yaml.default_flow_style = False
         self._data: CommentedMap | None = None
+        self.file_path: str = file_path
         self.base: BaseConfig = BaseConfig()
         self.openai: OpenAIConfig = OpenAIConfig()
         self.translate: TranslateConfig = TranslateConfig()
 
-    def load(self, file: str = "config.yml"):
+    def load(self, file: str = None):
+        if file is None:
+            file = self.file_path
         if not os.path.exists(file):
             self._create_default_config(file)
 
@@ -47,7 +50,9 @@ class Config:
         self.openai = OpenAIConfig(**self._data.get("openai", {}))
         self.translate = TranslateConfig(**self._data.get("translate", {}))
 
-    def save(self, file: str = "config.yml"):
+    def save(self, file: str = None):
+        if file is None:
+            file = self.file_path
         if self._data is None:
             self._data = CommentedMap()
 
@@ -55,9 +60,9 @@ class Config:
         self._sync_to_commented_map(self._data, "openai", self.openai)
         self._sync_to_commented_map(self._data, "translate", self.translate)
 
+        logger.info(f"Saving configuration to {file}")
         with open(file, "w", encoding="utf-8") as f:
             self.yaml.dump(self._data, f)
-        logger.info(f"Configuration saved to {file}")
 
     @staticmethod
     def _sync_to_commented_map(data: CommentedMap, key: str, dataclass_obj) -> None:

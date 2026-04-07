@@ -12,6 +12,7 @@ class OSCClient:
         self.port = port
         self.client = udp_client.SimpleUDPClient(ip, port)
 
-    def chatbox_input(self, message, bypass_keyboard=True, notify=True):
-        logger.debug(f"Sending to OSC: {message}")
+    def chatbox_input(self, message: str, bypass_keyboard=True, notify=True):
+        log_msg = message.replace("\n", "\\n")
+        logger.debug(f"Sending to OSC: {log_msg}")
         self.client.send_message("/chatbox/input", [message, bypass_keyboard, notify])
