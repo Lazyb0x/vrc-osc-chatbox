@@ -60,6 +60,7 @@ class TranslateAgent:
             ]
         }
         agent = create_agent(model=model, tools=[self.change_target_language])
+        logger.debug(f"Translation agent start")
         response: dict = await agent.ainvoke(conversation)
         try:
             messages = response.get("messages", [])
@@ -67,6 +68,7 @@ class TranslateAgent:
                 logger.error("Invalid response format: 'messages' is missing or not a list.")
                 return "No content available."
             last_msg = messages[-1]
+            logger.debug(f"Translation agent response: {last_msg}")
             return getattr(last_msg, "content", "No content available.")
         except Exception as e:
             logger.error(f"Error processing response: {e}")

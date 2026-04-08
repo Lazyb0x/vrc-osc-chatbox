@@ -42,20 +42,25 @@ def create_app(config: Config, osc_ip: str, osc_port: int):
     @app.websocket("/oscws")
     async def websocket_endpoint(websocket: WebSocket):
         await websocket.accept()
+        # 建立连接时发送配置内容
+        await websocket.send_text(json.dumps({"translation": config.translate.enable}))
+        
         while True:
             try:
                 msg_json = await websocket.receive_text()
                 logger.debug(f"Received: {msg_json}")
 
                 message = Message.from_dict(json.loads(msg_json))
-                if message.data is None or message.data.strip() == "":
-                    osc_client.chatbox_input("")
-                    continue
 
                 async def backgroud_task():
                     async for processed_text in message_processor.process(message):
                         osc_client.chatbox_input(processed_text)
-                        response = json.dumps({"data": processed_text})
+                        response = json.dumps(
+                            {
+                                "data": processed_text,
+                                "translation": config.translate.enable,
+                            }
+                        )
                         await websocket.send_text(response)
 
                 asyncio.create_task(backgroud_task())
