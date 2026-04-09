@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 import logging
 
+import pyperclip
+
 from vrcchatbox.config import Config
 from vrcchatbox.handler import MsgContext, build_pipeline
 
@@ -44,7 +46,9 @@ class MessageProcessor:
         if message.realtime is not None and message.realtime is False:
             param["debounced_seconds"] = 0
         # 复制到系统剪贴板
-        # TODO
+        if message.clipboard is not None:
+            pyperclip.copy(message.clipboard)
+            logger.info(f"Copied to clipboard: {message.clipboard}")
 
         ctx = MsgContext(text=message.data, param=param)
         async for result in self.pipeline.process(ctx):
