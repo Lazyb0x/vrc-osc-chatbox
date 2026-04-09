@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class Message:
-    data: str
+    data: str | None = None
     translation: bool | None = None
     realtime: bool | None = None
     clipboard: str | None = None
@@ -19,7 +19,7 @@ class Message:
     @staticmethod
     def from_dict(data: dict) -> "Message":
         return Message(
-            data=data.get("data", ""),
+            data=data.get("data"),
             translation=data.get("translation"),
             realtime=data.get("realtime"),
             clipboard=data.get("clipboard"),
@@ -50,6 +50,8 @@ class MessageProcessor:
             pyperclip.copy(message.clipboard)
             logger.info(f"Copied to clipboard: {message.clipboard}")
 
+        if message.data is None:
+            return
         ctx = MsgContext(text=message.data, param=param)
         async for result in self.pipeline.process(ctx):
             yield result.text
