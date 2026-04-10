@@ -18,6 +18,13 @@ dependencies = [
 [project.scripts]
 vrc-chatbox = "main:main"
 
+[tool.uv]
+package = true
+
+[tool.setuptools]
+py-modules = ["main"]
+packages = ["vrcchatbox"]
+
 [dependency-groups]
 dev = [
     "ipykernel>=7.2.0",

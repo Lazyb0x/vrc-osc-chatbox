@@ -8,10 +8,11 @@ wheels/
 
 # environments
 .venv
-.vscode
+.vscode/*
 
 # logs
 logs/
+*.log
 
 # staticfiles
 static/

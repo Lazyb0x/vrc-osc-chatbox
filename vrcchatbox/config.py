@@ -18,6 +18,10 @@ class OpenAIConfig:
 @dataclass
 class BaseConfig:
     logging_level: str = "INFO"
+    host: str = "127.0.0.1"
+    port: int = 8000
+    osc_host: str = "127.0.0.1"
+    osc_port: int = 9000
 
 
 @dataclass
@@ -27,32 +31,43 @@ class TranslateConfig:
 
 
 class Config:
-    def __init__(self, file_path: str = "config.yml"):
+    def __init__(self, file_path: str = None):
         self.yaml = YAML()
         self.yaml.preserve_quotes = True
         self.yaml.default_flow_style = False
         self._data: CommentedMap | None = None
-        self.file_path: str = file_path
         self.base: BaseConfig = BaseConfig()
         self.openai: OpenAIConfig = OpenAIConfig()
         self.translate: TranslateConfig = TranslateConfig()
+        self.file_path: str = self._resolve_config_path(file_path)
 
-    def load(self, file: str = None):
-        if file is None:
-            file = self.file_path
-        if not os.path.exists(file):
-            self._create_default_config(file)
+    @staticmethod
+    def _resolve_config_path(file_path: str) -> str:
+        """解析配置文件路径"""
+        from pathlib import Path
 
-        with open(file, "r", encoding="utf-8") as f:
+        if file_path is not None:
+            return file_path
+
+        cwd_config = Path.cwd() / "config.yml"
+        if cwd_config.exists():
+            return str(cwd_config)
+
+        return str(cwd_config)
+
+    def load(self):
+        if not os.path.exists(self.file_path):
+            self._create_default_config(self.file_path)
+            logger.info(f"Created configuration file: {self.file_path}")
+
+        with open(self.file_path, "r", encoding="utf-8") as f:
             self._data = self.yaml.load(f)
 
         self.base = BaseConfig(**self._data.get("base", {}))
         self.openai = OpenAIConfig(**self._data.get("openai", {}))
         self.translate = TranslateConfig(**self._data.get("translate", {}))
 
-    def save(self, file: str = None):
-        if file is None:
-            file = self.file_path
+    def save(self):
         if self._data is None:
             self._data = CommentedMap()
 
@@ -60,8 +75,8 @@ class Config:
         self._sync_to_commented_map(self._data, "openai", self.openai)
         self._sync_to_commented_map(self._data, "translate", self.translate)
 
-        logger.info(f"Saving configuration to {file}")
-        with open(file, "w", encoding="utf-8") as f:
+        logger.info(f"Saving configuration to {self.file_path}")
+        with open(self.file_path, "w", encoding="utf-8") as f:
             self.yaml.dump(self._data, f)
 
     @staticmethod
@@ -79,6 +94,10 @@ class Config:
                 "base": CommentedMap(
                     {
                         "logging_level": self.base.logging_level,
+                        "host": self.base.host,
+                        "port": self.base.port,
+                        "osc_host": self.base.osc_host,
+                        "osc_port": self.base.osc_port,
                     }
                 ),
                 "openai": CommentedMap(

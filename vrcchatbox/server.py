@@ -1,6 +1,9 @@
 import asyncio
 import json
 import logging
+import webbrowser
+import threading
+from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI, Request
@@ -18,9 +21,9 @@ from vrcchatbox.utils.logger import get_log_config
 logger = logging.getLogger(__name__)
 
 
-def create_app(config: Config, osc_ip: str, osc_port: int):
+def create_app(config: Config, osc_host: str, osc_port: int):
     app = FastAPI()
-    osc_client = OSCClient(osc_ip, osc_port)
+    osc_client = OSCClient(osc_host, osc_port)
     message_processor = MessageProcessor(config=config)
 
     # ========== 全局异常处理器 ==========
@@ -44,7 +47,7 @@ def create_app(config: Config, osc_ip: str, osc_port: int):
         await websocket.accept()
         # 建立连接时发送配置内容
         await websocket.send_text(json.dumps({"translation": config.translate.enable}))
-        
+
         while True:
             try:
                 msg_json = await websocket.receive_text()
@@ -69,11 +72,14 @@ def create_app(config: Config, osc_ip: str, osc_port: int):
                 break
 
     # 挂载静态文件目录（挂载到根目录，html=True 启用 SPA fallback）
-    app.mount("/", StaticFiles(directory="static", html=True), name="static")
+    static_dir = Path(__file__).parent.parent / "static"
+    app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
 
     return app
 
 
-def run_server(config: Config, host: str, port: int, osc_ip: str, osc_port: int):
-    app = create_app(config, osc_ip, osc_port)
+def run_server(config: Config, host: str, port: int, osc_host: str, osc_port: int):
+    app = create_app(config, osc_host, osc_port)
+    # 调用浏览器打开页面
+    threading.Timer(1, lambda: webbrowser.open(f"http://{host}:{port}")).start()
     uvicorn.run(app, host=host, port=port, log_config=get_log_config())

@@ -30,7 +30,9 @@ def run_console(config: Config, ip: str, port: int):
 
                     async def process_message():
                         final_msg = ""
-                        async for out_msg in message_processor.process(Message(data=msg)):
+                        async for out_msg in message_processor.process(
+                            Message(data=msg, realtime=False)
+                        ):
                             final_msg = out_msg
                             osc_client.chatbox_input(out_msg)
                         print(final_msg)

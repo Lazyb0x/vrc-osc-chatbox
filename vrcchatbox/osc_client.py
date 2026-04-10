@@ -7,10 +7,10 @@ logger = logging.getLogger(__name__)
 
 class OSCClient:
 
-    def __init__(self, ip: str, port: int):
-        self.ip = ip
+    def __init__(self, host: str, port: int):
+        self.ip = host
         self.port = port
-        self.client = udp_client.SimpleUDPClient(ip, port)
+        self.client = udp_client.SimpleUDPClient(host, port)
 
     def chatbox_input(self, message: str, bypass_keyboard=True, notify=True):
         log_msg = message.replace("\n", "\\n")

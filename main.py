@@ -1,50 +1,41 @@
 import argparse
 import atexit
+import logging
 
 from vrcchatbox.config import Config
 from vrcchatbox.console import run_console
 from vrcchatbox.server import run_server
 from vrcchatbox.utils.logger import setup_logger
 
+logger = logging.getLogger(__name__)
+
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--ip", default="127.0.0.1", help="The ip of the OSC server")
-    parser.add_argument(
-        "--port", type=int, default=9000, help="The port the OSC server is listening on"
-    )
-    parser.add_argument("--serve", action="store_true", help="Start server mode")
+    parser.add_argument("--serve", action="store_true", help="Start server mode (default)")
     parser.add_argument("--console", action="store_true", help="Start console mode")
-    parser.add_argument(
-        "--server-ip",
-        default="0.0.0.0",
-        help="Server address",
-    )
-    parser.add_argument(
-        "--server-port",
-        default=8000,
-        type=int,
-        help="Server port",
-    )
-    parser.add_argument(
-        "--config",
-        default="config.yml",
-        help="Path to the YAML configuration file",
-    )
+    parser.add_argument("--config", help="Path to the YAML configuration file")
+    parser.add_argument("--osc-host", help="The address of the OSC server")
+    parser.add_argument("--osc-port", type=int, help="The port the OSC server is listening on")
+    parser.add_argument("--server-host", help="Web server address")
+    parser.add_argument("--server-port", type=int, help="Web server port")
+    parser.add_argument("--debug", action="store_true", help="Enable debug mode")
     args = parser.parse_args()
 
-    # 初始化配置
+    setup_logger(logging_level= "DEBUG" if args.debug else None)
     config = Config(file_path=args.config)
     config.load()
     atexit.register(config.save)
-    setup_logger(config)
+    
+    host = args.server_host or config.base.host
+    port = args.server_port or config.base.port
+    osc_host = args.osc_host or config.base.osc_host
+    osc_port = args.osc_port or config.base.osc_port
 
     if not args.console:
-        host, port = args.server_ip, args.server_port
-        port = int(port)
-        run_server(config, host, port, args.ip, args.port)
+        run_server(config, host, port, osc_host, osc_port)
     else:
-        run_console(config, args.ip, args.port)
+        run_console(config, osc_host, osc_port)
 
 
 if __name__ == "__main__":
