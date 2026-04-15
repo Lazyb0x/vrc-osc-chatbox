@@ -1,6 +1,7 @@
 import logging
 import os
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, field, fields
+
 from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedMap
 
@@ -27,7 +28,7 @@ class BaseConfig:
 @dataclass
 class TranslateConfig:
     enable: bool = False
-    languages: list[str] = None
+    languages: list[str] = field(default_factory=lambda: ["en"])
 
 
 class Config:

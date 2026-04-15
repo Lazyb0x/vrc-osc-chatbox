@@ -3,8 +3,6 @@ import logging
 from dataclasses import dataclass, replace
 from typing import AsyncGenerator, List, Type
 
-from langchain_openai import ChatOpenAI
-
 from vrcchatbox.agent import TranslateAgent
 from vrcchatbox.config import Config
 

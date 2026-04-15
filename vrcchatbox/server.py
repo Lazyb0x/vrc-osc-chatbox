@@ -1,8 +1,8 @@
 import asyncio
 import json
 import logging
-import webbrowser
 import threading
+import webbrowser
 from pathlib import Path
 
 import uvicorn
@@ -15,14 +15,13 @@ from starlette.websockets import WebSocketDisconnect
 from vrcchatbox.config import Config
 from vrcchatbox.message import Message, MessageProcessor
 from vrcchatbox.osc_client import OSCClient
-from vrcchatbox.utils.app_context import AppContext
 from vrcchatbox.utils.logger import get_log_config
 
 logger = logging.getLogger(__name__)
 
 
 def create_app(config: Config, osc_host: str, osc_port: int):
-    app = FastAPI()
+    app = FastAPI(root_path="/api")
     osc_client = OSCClient(osc_host, osc_port)
     message_processor = MessageProcessor(config=config)
 

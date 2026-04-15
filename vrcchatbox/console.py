@@ -19,6 +19,10 @@ def run_console(config: Config, ip: str, port: int):
             line = input("> " if prompt else "  ")
             if line.lower() in ("exit", "quit", "/q"):
                 break
+            if line.lower() in ("/translate", "/t"):
+                config.translate.enable = not config.translate.enable
+                print(f"Translation is {'enabled' if config.translate.enable else 'disabled'}.")
+                continue
 
             if line == "":
                 empty_count += 1

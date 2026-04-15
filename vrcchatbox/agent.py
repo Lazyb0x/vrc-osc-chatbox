@@ -1,7 +1,7 @@
 import logging
 
-from langchain.tools import tool
 from langchain.agents import create_agent
+from langchain.tools import tool
 from langchain_openai import ChatOpenAI
 
 from vrcchatbox.config import Config
@@ -65,7 +65,9 @@ class TranslateAgent:
         try:
             messages = response.get("messages", [])
             if not isinstance(messages, list) or not messages:
-                logger.error("Invalid response format: 'messages' is missing or not a list.")
+                logger.error(
+                    "Invalid response format: 'messages' is missing or not a list."
+                )
                 return "No content available."
             last_msg = messages[-1]
             logger.debug(f"Translation agent response: {last_msg}")
