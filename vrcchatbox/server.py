@@ -45,7 +45,14 @@ def create_app(config: Config, osc_host: str, osc_port: int):
     async def websocket_endpoint(websocket: WebSocket):
         await websocket.accept()
         # 建立连接时发送配置内容
-        await websocket.send_text(json.dumps({"translation": config.translate.enable}))
+        await websocket.send_text(
+            json.dumps(
+                {
+                    "translation": config.translate.enable,
+                    "languages": config.translate.languages,
+                }
+            )
+        )
 
         while True:
             try:
@@ -61,6 +68,7 @@ def create_app(config: Config, osc_host: str, osc_port: int):
                             {
                                 "data": processed_text,
                                 "translation": config.translate.enable,
+                                "languages": config.translate.languages,
                             }
                         )
                         await websocket.send_text(response)

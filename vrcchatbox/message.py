@@ -15,6 +15,7 @@ class Message:
     translation: bool | None = None
     realtime: bool | None = None
     clipboard: str | None = None
+    languages: list[str] | None = None
 
     @staticmethod
     def from_dict(data: dict) -> "Message":
@@ -23,6 +24,7 @@ class Message:
             translation=data.get("translation"),
             realtime=data.get("realtime"),
             clipboard=data.get("clipboard"),
+            languages=data.get("languages"),
         )
 
 
@@ -42,6 +44,11 @@ class MessageProcessor:
         ):
             logger.info(f"Translation changed to {message.translation}")
             self.config.translate.enable = message.translation
+        # 翻译语言切换
+        if message.languages is not None:
+            logger.info(f"Translation languages changed to {message.languages}")
+            self.config.translate.languages = message.languages
+
         # 非实时输入关闭防抖
         if message.realtime is not None and message.realtime is False:
             param["debounced_seconds"] = 0

@@ -2,6 +2,7 @@
 import {
   NButton,
   NCard,
+  NDynamicTags,
   NSpace,
   NInput,
   NGrid,
@@ -30,6 +31,7 @@ const translationActive = ref(false)
 const cutCount = ref(2)
 const currText = shallowRef('')
 const isCompositing = ref(false)
+const translationLanguages = ref(['en'])
 
 const theme = ref<GlobalTheme | null>(null)
 const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
@@ -68,6 +70,9 @@ const connectWS = () => {
       }
       if (msg.translation) {
         translationActive.value = msg.translation
+      }
+      if (msg.languages) {
+        translationLanguages.value = msg.languages
       }
     } catch (e) {
       console.error('Failed to parse WebSocket message:', e)
@@ -126,18 +131,23 @@ const submit = () => {
   clear()
 }
 
+const sendWSMessage = (data: Record<string, unknown>): boolean => {
+  if (ws.value && ws.value.readyState === WebSocket.OPEN) {
+    ws.value.send(JSON.stringify(data))
+    return true
+  } else {
+    console.error('WebSocket not connected')
+    return false
+  }
+}
+
 const submitMsg = (msg: string) => {
   // 截取文本处理
   // debugger
   const processedText = autoCutActive.value ? processText(msg, cutCount.value) : msg
   // const processedText = msg
 
-  if (ws.value && ws.value.readyState === WebSocket.OPEN) {
-    const msgObj = JSON.stringify({ data: processedText, realtime: realTimeActive.value })
-    ws.value.send(msgObj)
-  } else {
-    console.error('WebSocket not connected')
-  }
+  sendWSMessage({ data: processedText, realtime: realTimeActive.value })
 
   return processedText
   // currText.value = processedText
@@ -188,13 +198,13 @@ const handleKeydown = (e: KeyboardEvent) => {
 }
 
 const handleTranslationActiveChange = (active: boolean) => {
-  if (ws.value && ws.value.readyState === WebSocket.OPEN) {
-    const msgObj = JSON.stringify({ translation: active })
-    ws.value.send(msgObj)
-  } else {
-    console.error('WebSocket not connected')
-  }
+  sendWSMessage({ translation: active })
 }
+
+const handleLanguageChange = (strings: string[]) => {
+  sendWSMessage({ languages: strings })
+}
+
 
 const copyClick = () => {
   if (navigator.clipboard && navigator.permissions) {
@@ -205,12 +215,7 @@ const copyClick = () => {
     console.info('Clipboard API not supported')
     inputInstRef.value?.select()
   }
-  if (ws.value && ws.value.readyState === WebSocket.OPEN) {
-    const msgObj = JSON.stringify({ clipboard: inputValue.value })
-    ws.value.send(msgObj)
-  } else {
-    console.error('WebSocket not connected')
-  }
+  sendWSMessage({ clipboard: inputValue.value })
 }
 
 function processText(input: string, cutCount: number = 2): string {
@@ -247,49 +252,32 @@ function processText(input: string, cutCount: number = 2): string {
       <n-grid x-gap="12" y-gap="12" cols="1" responsive="screen">
         <n-grid-item>
           <n-card title="文本输入">
-            <n-input
-              ref="inputInstRef"
-              v-model:value="inputValue"
-              type="textarea"
-              placeholder="请输入文本..."
-              :input-props="{
-                onCompositionstart: handleCompositionStart,
-                onCompositionupdate: handleCompositionUpdate,
-                onCompositionend: handleCompositionEnd,
-              }"
-              @input="handleChange"
-              @keydown="handleKeydown"
-              :autosize="{ minRows: 5, maxRows: 10 }"
-            />
+            <n-input ref="inputInstRef" v-model:value="inputValue" type="textarea" placeholder="请输入文本..." :input-props="{
+              onCompositionstart: handleCompositionStart,
+              onCompositionupdate: handleCompositionUpdate,
+              onCompositionend: handleCompositionEnd,
+            }" @input="handleChange" @keydown="handleKeydown" :autosize="{ minRows: 5, maxRows: 10 }" />
             <n-scrollbar x-scrollable trigger="none" style="margin-top: 1em">
-              <n-form
-                inline
-                label-placement="left"
-                label-width="auto"
-                require-mark-placement="right-hanging"
-              >
+              <n-form inline label-placement="left" label-width="auto" require-mark-placement="right-hanging">
                 <n-form-item label="实时输入" style="padding-right: 10px">
                   <n-switch v-model:value="realTimeActive" />
                 </n-form-item>
                 <n-form-item label="翻译" style="padding-right: 40px">
-                  <n-switch
-                    v-model:value="translationActive"
-                    @update:value="handleTranslationActiveChange"
-                  />
+                  <n-switch v-model:value="translationActive" @update:value="handleTranslationActiveChange" />
                 </n-form-item>
                 <n-form-item label="自动截取" style="padding-right: 40px">
                   <n-switch v-model:value="autoCutActive" />
                 </n-form-item>
-                <n-form-item label="截取句数" v-show="autoCutActive" style="padding-right: 100px">
-                  <n-input-number
-                    v-model:value="cutCount"
-                    :min="1"
-                    size="small"
-                    style="flex-shrink: 0; width: 80px"
-                  />
-                </n-form-item>
               </n-form>
             </n-scrollbar>
+            <n-form label-placement="left" label-width="auto">
+              <n-form-item label="翻译语言" v-show="translationActive">
+                <n-dynamic-tags v-model:value="translationLanguages" :max="3" @change="handleLanguageChange" />
+              </n-form-item>
+              <n-form-item label="截取句数" v-show="autoCutActive" style="padding-right: 100px">
+                <n-input-number v-model:value="cutCount" :min="1" size="small" style="flex-shrink: 0; width: 80px" />
+              </n-form-item>
+            </n-form>
 
             <n-space justify="space-between">
               <n-space>
@@ -298,10 +286,7 @@ function processText(input: string, cutCount: number = 2): string {
                 <n-button @click="copyClick">复制</n-button>
               </n-space>
               <n-space justify="end">
-                <n-button type="primary" @click="submit" :disabled="realTimeActive"
-                  >提交</n-button
-                ></n-space
-              >
+                <n-button type="primary" @click="submit" :disabled="realTimeActive">提交</n-button></n-space>
             </n-space>
           </n-card>
           <div style="margin-top: 1em">

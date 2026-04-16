@@ -93,6 +93,7 @@ class TranslateHandler(MsgHandler):
         except asyncio.CancelledError:
             return
         except Exception as e:
+            logger.exception(f"Error translating text: {ctx.text}")
             yield replace(
                 ctx,
                 text=f"{ctx.text}\n[翻译接口错误，请检查模型信息是否配置正确: {str(e)}]",
