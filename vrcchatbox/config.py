@@ -58,6 +58,7 @@ class Config:
         return str(cwd_config)
 
     def load(self):
+        logger.info(f"Loading configuration from {self.file_path}")
         if not os.path.exists(self.file_path):
             self._create_default_config(self.file_path)
             logger.info(f"Created configuration file: {self.file_path}")

@@ -1,4 +1,5 @@
 import asyncio
+from contextlib import asynccontextmanager
 import json
 import logging
 import threading
@@ -20,17 +21,23 @@ from vrcchatbox.utils.logger import get_log_config
 logger = logging.getLogger(__name__)
 
 
-def create_app(config: Config, osc_host: str, osc_port: int):
-    app = FastAPI(root_path="/api")
+def create_app(config: Config, host: str, port: int, osc_host: str, osc_port: int):
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        # 启动完成后打开浏览器
+        threading.Timer(1, lambda: webbrowser.open(f"http://{host}:{port}")).start()
+        yield
+        logger.info("Shutting down web server")
+
+    app = FastAPI(root_path="/api", lifespan=lifespan)
     osc_client = OSCClient(osc_host, osc_port)
     message_processor = MessageProcessor(config=config)
 
     # ========== 全局异常处理器 ==========
 
     @app.exception_handler(WebSocketDisconnect)
-    async def websocket_disconnect_handler(
-        websocket: WebSocket, exc: WebSocketDisconnect
-    ):
+    async def websocket_disconnect_handler(websocket: WebSocket, exc: WebSocketDisconnect):
         logger.info("Client disconnected")
 
     @app.exception_handler(Exception)
@@ -85,8 +92,21 @@ def create_app(config: Config, osc_host: str, osc_port: int):
     return app
 
 
-def run_server(config: Config, host: str, port: int, osc_host: str, osc_port: int):
-    app = create_app(config, osc_host, osc_port)
-    # 调用浏览器打开页面
-    threading.Timer(1, lambda: webbrowser.open(f"http://{host}:{port}")).start()
-    uvicorn.run(app, host=host, port=port, log_config=get_log_config())
+def run_server(
+    config: Config, host: str, port: int, osc_host: str, osc_port: int, block: bool = True
+) -> uvicorn.Server:
+    app = create_app(config, host, port, osc_host, osc_port)
+
+    uvicorn_config = uvicorn.Config(app, host=host, port=port, log_config=get_log_config())
+    server = uvicorn.Server(uvicorn_config)
+
+    if block:
+        try:
+            server.run()
+        except KeyboardInterrupt:
+            pass
+    else:
+        t = threading.Thread(target=server.run, daemon=True)
+        t.start()
+
+    return server
