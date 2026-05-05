@@ -10,10 +10,11 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class OpenAIConfig:
-    model: str = "gpt-5-mini"
-    api_base: str = "https://api.openai.com/v1"
+    model: str = "openai/gpt-4o"
+    api_base: str = "https://openrouter.ai/api/v1"
     api_key: str = None
     prompt: str = None
+    thinking: bool | None = None
 
 
 @dataclass
@@ -107,6 +108,7 @@ class Config:
                         "api_base": self.openai.api_base,
                         "api_key": self.openai.api_key,
                         "prompt": self.openai.prompt,
+                        "thinking": self.openai.thinking,
                     }
                 ),
                 "translate": CommentedMap(
@@ -117,6 +119,37 @@ class Config:
                 ),
             }
         )
+
+        base: CommentedMap = self._data["base"]
+        base.yaml_set_comment_before_after_key(
+            "logging_level", before="日志级别: DEBUG / INFO / WARNING / ERROR", indent=2
+        )
+        base.yaml_set_comment_before_after_key("host", before="监听地址", indent=2)
+        base.yaml_set_comment_before_after_key("port", before="监听端口", indent=2)
+        base.yaml_set_comment_before_after_key("osc_host", before="OSC 目标地址", indent=2)
+        base.yaml_set_comment_before_after_key("osc_port", before="OSC 目标端口", indent=2)
+
+        openai: CommentedMap = self._data["openai"]
+        openai.yaml_set_comment_before_after_key(
+            "model", before="翻译使用的模型，如 gpt-4o", indent=2
+        )
+        openai.yaml_set_comment_before_after_key(
+            "api_base", before="API 地址，使用代理时修改此项", indent=2
+        )
+        openai.yaml_set_comment_before_after_key("api_key", before="API Key", indent=2)
+        openai.yaml_set_comment_before_after_key("prompt", before="系统提示词", indent=2)
+        openai.yaml_set_comment_before_after_key(
+            "thinking",
+            before="思考模式开关 (true/false)，空则使用模型默认设置。需要模型支持。小模型推荐开启",
+            indent=2,
+        )
+
+        translate: CommentedMap = self._data["translate"]
+        translate.yaml_set_comment_before_after_key("enable", before="是否启用翻译", indent=2)
+        translate.yaml_set_comment_before_after_key(
+            "languages", before="目标语言列表，如 [zh, en]", indent=2
+        )
+
         with open(file, "w", encoding="utf-8") as f:
             self.yaml.dump(self._data, f)
 
