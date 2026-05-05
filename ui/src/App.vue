@@ -48,6 +48,10 @@ const updateTheme = () => {
 }
 
 const connectWS = () => {
+  if (ws.value) {
+    ws.value.close()
+  }
+
   const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
   const host = window.location.host
   const path = '/api/oscws'
@@ -81,7 +85,7 @@ const connectWS = () => {
 }
 
 const checkAndReconnect = () => {
-  if (!ws.value || ws.value.readyState !== WebSocket.OPEN) {
+  if (!ws.value || ws.value.readyState === WebSocket.CLOSED) {
     console.log('WebSocket disconnected, reconnecting...')
     connectWS()
   }
