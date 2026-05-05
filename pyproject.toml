@@ -8,15 +8,17 @@ dependencies = [
     "python-osc>=1.9.3",
     "fastapi>=0.104.1",
     "uvicorn[standard]>=0.24.0",
-    "langchain>=1.2.13",
-    "langchain-openai>=1.1.11",
     "colorlog>=6.8.0",
     "ruamel.yaml>=0.18.0",
     "pyperclip>=1.11.0",
+    "openai>=2.34.0",
 ]
 
 [project.scripts]
 vrc-chatbox = "main:main"
+
+[tool.black]
+line-length = 100
 
 [tool.uv]
 package = true

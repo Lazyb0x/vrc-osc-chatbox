@@ -1,24 +1,87 @@
+import json
 import logging
-from typing import Any, Callable
-
-from langchain.agents import create_agent
-from langchain.tools import tool
-from langchain_openai import ChatOpenAI
+from dataclasses import dataclass
+from openai import AsyncOpenAI
 
 from vrcchatbox.config import Config
 
 logger = logging.getLogger(__name__)
 
 
-class TranslateAgent:
+@dataclass
+class ToolResult:
+    result: str
+    end_conversation: bool = False
 
+
+@dataclass
+class AgentResult:
+    content: str
+    from_tool: bool = False
+
+
+change_target_language = {
+    "type": "function",
+    "function": {
+        "name": "change_target_language",
+        "description": '在用户明确说要"切换"或"翻译"到不同语言时调用。例如 ["en", "zh", "ja"]',
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "codes": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": '目标语言代码列表，如 ["en", "zh", "ja"]',
+                }
+            },
+            "required": ["codes"],
+        },
+    },
+}
+
+switch_translation = {
+    "type": "function",
+    "function": {
+        "name": "switch_translation",
+        "description": "在用户提到要打开或者关闭功能时调用。True 启用翻译，False 禁用翻译",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "enable": {"type": "boolean", "description": "True 启用翻译，False 禁用翻译"}
+            },
+            "required": ["enable"],
+        },
+    },
+}
+
+TOOLS = [change_target_language]
+
+TOOL_CALL_MAP = {}
+
+
+class TranslateAgent:
     def __init__(self, config: Config):
         self.config = config
-        self.model = ChatOpenAI(
-            model=self.config.openai.model,
-            base_url=self.config.openai.api_base,
-            api_key=self.config.openai.api_key,
-        )
+        self._setup_tool_map()
+
+    def _setup_tool_map(self):
+        def change_target_language_impl(codes: list[str]) -> ToolResult:
+            self.config.translate.languages = codes
+            logger.info(f"Translation target languages set to: {codes}")
+            return ToolResult(result=f"翻译目标语言已更新为 {codes}", end_conversation=True)
+
+        def switch_translation_impl(enable: bool) -> ToolResult:
+            self.config.translate.enable = enable
+            logger.info(f"Translation enabled set to: {enable}")
+            return ToolResult(
+                result=f"翻译功能已 {'启用' if enable else '禁用'}", end_conversation=True
+            )
+
+        global TOOL_CALL_MAP
+        TOOL_CALL_MAP = {
+            "change_target_language": change_target_language_impl,
+            "switch_translation": switch_translation_impl,
+        }
 
     async def translate(self, input_text: str) -> str:
         if not self.config.translate.enable:
@@ -26,76 +89,85 @@ class TranslateAgent:
         if not self.config.translate.languages:
             raise ValueError("No translation languages configured.")
 
-        model = ChatOpenAI(
-            model=self.config.openai.model,
-            base_url=self.config.openai.api_base,
+        extra_body = None
+        if self.config.openai.thinking is not None:
+            extra_body = {
+                "thinking": {"type": "enabled" if self.config.openai.thinking else "disabled"},
+            }
+
+        client = AsyncOpenAI(
             api_key=self.config.openai.api_key,
-        )
-        conversation = self._get_conversation(
-            self.config.translate.languages, input_text
+            base_url=self.config.openai.api_base,
         )
 
-        logger.debug(f"Translation agent start")
-        tool_messages = []
-        tools = self._create_tools(tool_messages)
-        agent = create_agent(model=model, tools=tools)
-        response: dict = await agent.ainvoke(conversation)
+        conversation = self._get_conversation(self.config.translate.languages, input_text)
 
-        # 如果使用了工具，返回工具的输出信息而不是AI生成结果
-        if tool_messages:
-            return "\n".join(tool_messages)
+        logger.debug("Translation agent start")
 
-        try:
-            messages = response.get("messages", [])
-            if not isinstance(messages, list) or not messages:
-                logger.error(
-                    "Invalid response format: 'messages' is missing or not a list."
-                )
-                return "No content available."
-            last_msg = messages[-1]
-            logger.debug(f"Translation agent response: {last_msg}")
-            return getattr(last_msg, "content", "No content available.")
-        except Exception as e:
-            logger.error(f"Error processing response: {e}")
-            return "An error occurred while processing the response."
+        res: AgentResult = await self._run_agent(client, conversation, extra_body)
+        content = res.content
+        if res.from_tool:
+            content = "[" + content + "]"
+
+        return content
+
+    async def _run_agent(
+        self, client: AsyncOpenAI, conversation: list[dict], extra_body: dict | None
+    ) -> AgentResult:
+        while True:
+            response = await client.chat.completions.create(
+                model=self.config.openai.model,
+                messages=conversation,
+                tools=TOOLS,
+                extra_body=extra_body,
+            )
+
+            message = response.choices[0].message
+            logger.debug(f"Response: {message}")
+
+            conversation.append(response.choices[0].message)
+
+            tool_calls = message.tool_calls
+
+            if tool_calls is None:
+                return AgentResult(content=message.content or "No content available.")
+
+            for tool_call in tool_calls:
+                tool_name = tool_call.function.name
+                tool_args = json.loads(tool_call.function.arguments)
+                tool_function = TOOL_CALL_MAP.get(tool_name)
+
+                if tool_function:
+                    tool_result: ToolResult = tool_function(**tool_args)
+                    logger.debug(f"Tool result for {tool_name}: {tool_result}")
+                    conversation.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": tool_call.id,
+                            "content": tool_result.result,
+                        }
+                    )
+                    if tool_result.end_conversation:
+                        return AgentResult(content=tool_result.result, from_tool=True)
+                else:
+                    logger.warning(f"Unknown tool: {tool_name}")
 
     @staticmethod
-    def _get_conversation(languages: str, input_text: str) -> str:
-        return {
-            "messages": [
-                {
-                    "role": "system",
-                    "content": f"You are a professional, authentic machine translation engine.",
-                },
-                {
-                    "role": "user",
-                    "content": "你的任务是读取用户输入,然后: "
-                    "1.如果是普通对话,直接翻译成目标语言.多语言用换行隔开. "
-                    "2.如果用户明确指出要修改翻译目标语言,并且当前语言和目标语言不一致,使用 change_target_language 工具. "
-                    f"Current translate target language: {languages}.",
-                },
-                {
-                    "role": "user",
-                    "content": f"Translate the following input text. NO explanations. NO notes: \n\n{input_text}",
-                },
-            ]
-        }
-
-    def _create_tools(self, tool_messages: list[str]) -> list[Callable[..., Any]]:
-        @tool
-        def change_target_language(codes: list[str]):
-            """在用户明确说要"切换"或“翻译”到不同语言时调用。例如 ["en", "zh", "ja"]"""
-            self.config.translate.languages = codes
-            logger.info(f"Translation target languages set to: {codes}")
-            tool_messages.append(f"✓")
-            return "翻译目标语言已更新"
-
-        @tool
-        def switch_translation(enable: bool):
-            """在用户提到要打开或者关闭功能时调用。True 启用翻译，False 禁用翻译"""
-            self.config.translate.enable = enable
-            logger.info(f"Translation enabled set to: {enable}")
-            tool_messages.append(f"[翻译功能已 {'启用' if enable else '禁用'}]")
-            return f"翻译功能已 {'启用' if enable else '禁用'}"
-
-        return [change_target_language]
+    def _get_conversation(languages: str, input_text: str) -> list[dict]:
+        return [
+            {
+                "role": "system",
+                "content": "You are a professional, authentic machine translation engine.",
+            },
+            {
+                "role": "user",
+                "content": "你的任务是读取用户输入,然后: "
+                "1.如果是普通对话,直接翻译成目标语言.多语言译文用换行隔开. "
+                "2.如果用户明确指出要修改翻译目标语言,并且当前语言和目标语言不一致,使用 change_target_language 工具. "
+                f"Current translate target language: {languages}.",
+            },
+            {
+                "role": "user",
+                "content": f"Translate the following input text. NO explanations. NO notes: \n\n{input_text}",
+            },
+        ]
