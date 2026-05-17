@@ -1,13 +1,17 @@
 import logging
 import logging.config
 import os
+import sys
 from pathlib import Path
 
 import yaml
 
 
 def get_log_config():
-    log_file = Path(__file__).parent.parent.parent / "logging.yml"
+    if getattr(sys, "frozen", False):
+        log_file = Path(sys._MEIPASS) / "logging.yml"
+    else:
+        log_file = Path(__file__).parent.parent.parent / "logging.yml"
     with open(log_file, "r", encoding="utf-8") as f:
         log_config = yaml.safe_load(f.read())
     return log_config

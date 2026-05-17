@@ -2,6 +2,7 @@ import asyncio
 from contextlib import asynccontextmanager
 import json
 import logging
+import sys
 import threading
 import webbrowser
 from pathlib import Path
@@ -86,7 +87,10 @@ def create_app(config: Config, host: str, port: int, osc_host: str, osc_port: in
                 break
 
     # 挂载静态文件目录（挂载到根目录，html=True 启用 SPA fallback）
-    static_dir = Path(__file__).parent.parent / "static"
+    if getattr(sys, "frozen", False):
+        static_dir = Path(sys._MEIPASS) / "static"
+    else:
+        static_dir = Path(__file__).parent.parent / "static"
     app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
 
     return app
