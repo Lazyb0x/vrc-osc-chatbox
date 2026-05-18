@@ -54,8 +54,10 @@ switch_translation = {
     },
 }
 
-TOOLS = [change_target_language]
-
+TOOL_DEF_MAP = {
+    "change_target_language": change_target_language,
+    "switch_translation": switch_translation,
+}
 TOOL_CALL_MAP = {}
 
 
@@ -114,11 +116,13 @@ class TranslateAgent:
     async def _run_agent(
         self, client: AsyncOpenAI, conversation: list[dict], extra_body: dict | None
     ) -> AgentResult:
+        tools = [TOOL_DEF_MAP[t] for t in (self.config.translate.tools or []) if t in TOOL_DEF_MAP]
+
         while True:
             response = await client.chat.completions.create(
                 model=self.config.openai.model,
                 messages=conversation,
-                tools=TOOLS,
+                tools=tools,
                 extra_body=extra_body,
             )
 
@@ -162,8 +166,7 @@ class TranslateAgent:
             {
                 "role": "user",
                 "content": "你的任务是读取用户输入,然后: "
-                "1.如果是普通对话,直接翻译成目标语言.多语言译文用换行隔开. "
-                "2.如果用户明确指出要修改翻译目标语言,并且当前语言和目标语言不一致,使用 change_target_language 工具. "
+                "直接将对话翻译成目标语言.不要过多思考和废话.多语言译文用换行隔开. "
                 f"Current translate target language: {languages}.",
             },
             {

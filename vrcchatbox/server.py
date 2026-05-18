@@ -1,26 +1,25 @@
 import asyncio
-from contextlib import asynccontextmanager
 import json
 import logging
 import sys
 import threading
-from typing import Any, Optional
 import webbrowser
+from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any, Optional
 
-from pydantic import BaseModel
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
 from fastapi.websockets import WebSocket
+from pydantic import BaseModel
 from starlette.websockets import WebSocketDisconnect
 
 from vrcchatbox.config import Config
 from vrcchatbox.message import Message, MessageProcessor
 from vrcchatbox.osc_client import OSCClient
 from vrcchatbox.utils.logger import get_log_config
-from vrcchatbox.utils.netutil import get_ip_address, IpInfo
+from vrcchatbox.utils.netutil import IpInfo, get_ip_address
 
 logger = logging.getLogger(__name__)
 
@@ -112,19 +111,10 @@ def create_app(config: Config, host: str, port: int, osc_host: str, osc_port: in
             }
         )
 
-    # 挂载静态文件目录（挂载到根目录，html=True 启用 SPA fallback）
     if getattr(sys, "frozen", False):
         static_dir = Path(sys._MEIPASS) / "static"
     else:
         static_dir = Path(__file__).parent.parent / "static"
-
-    # favicon
-    favicon_file = static_dir / "favicon.ico"
-    if favicon_file.exists():
-
-        @app.get("/favicon.ico")
-        async def favicon():
-            return FileResponse(favicon_file)
 
     # SPA fallback
     @app.get("/{full_path:path}")

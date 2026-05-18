@@ -30,6 +30,7 @@ class BaseConfig:
 class TranslateConfig:
     enable: bool = False
     languages: list[str] = field(default_factory=lambda: ["en"])
+    tools: list[str] | None = None
 
 
 class Config:
@@ -89,7 +90,9 @@ class Config:
             data[key] = CommentedMap()
         section = data[key]
         for f in fields(dataclass_obj):
-            section[f.name] = getattr(dataclass_obj, f.name)
+            value = getattr(dataclass_obj, f.name)
+            if value is not None:
+                section[f.name] = value
 
     def _create_default_config(self, file: str = "config.yml"):
         self._data = CommentedMap(
@@ -108,8 +111,6 @@ class Config:
                         "model": self.openai.model,
                         "api_base": self.openai.api_base,
                         "api_key": self.openai.api_key,
-                        "prompt": self.openai.prompt,
-                        "thinking": self.openai.thinking,
                     }
                 ),
                 "translate": CommentedMap(
@@ -150,6 +151,7 @@ class Config:
         translate.yaml_set_comment_before_after_key(
             "languages", before="目标语言列表，如 [zh, en]", indent=2
         )
+        translate.yaml_set_comment_before_after_key("tools", before="翻译启用的 agent 工具", indent=2)
 
         with open(file, "w", encoding="utf-8") as f:
             self.yaml.dump(self._data, f)
