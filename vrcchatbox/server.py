@@ -4,12 +4,14 @@ import json
 import logging
 import sys
 import threading
+from typing import Any, Optional
 import webbrowser
 from pathlib import Path
 
+from pydantic import BaseModel
 import uvicorn
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.websockets import WebSocket
 from starlette.websockets import WebSocketDisconnect
@@ -18,11 +20,17 @@ from vrcchatbox.config import Config
 from vrcchatbox.message import Message, MessageProcessor
 from vrcchatbox.osc_client import OSCClient
 from vrcchatbox.utils.logger import get_log_config
+from vrcchatbox.utils.netutil import get_ip_address, IpInfo
 
 logger = logging.getLogger(__name__)
 
 
 def create_app(config: Config, host: str, port: int, osc_host: str, osc_port: int):
+
+    class ApiResponse(BaseModel):
+        code: int = 0
+        msg: str = "success"
+        data: Optional[Any] = None
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -86,12 +94,45 @@ def create_app(config: Config, host: str, port: int, osc_host: str, osc_port: in
             except WebSocketDisconnect:
                 break
 
+    @app.get("/ip-info")
+    async def get_ip_info():
+        ip_infos: list[IpInfo] = get_ip_address()
+        return ApiResponse(
+            data={
+                "port": port,
+                "ipInfos": [
+                    {
+                        "ip": ip_info.ip,
+                        "networkName": ip_info.network_name,
+                        "networkPrefix": ip_info.network_prefix,
+                        "adapterName": ip_info.adapter_name,
+                    }
+                    for ip_info in ip_infos
+                ],
+            }
+        )
+
     # 挂载静态文件目录（挂载到根目录，html=True 启用 SPA fallback）
     if getattr(sys, "frozen", False):
         static_dir = Path(sys._MEIPASS) / "static"
     else:
         static_dir = Path(__file__).parent.parent / "static"
-    app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
+
+    # favicon
+    favicon_file = static_dir / "favicon.ico"
+    if favicon_file.exists():
+
+        @app.get("/favicon.ico")
+        async def favicon():
+            return FileResponse(favicon_file)
+
+    # SPA fallback
+    @app.get("/{full_path:path}")
+    async def spa_fallback(full_path: str):
+        target = static_dir / full_path
+        if target.exists() and target.is_file():
+            return FileResponse(target)
+        return FileResponse(static_dir / "index.html")
 
     return app
 

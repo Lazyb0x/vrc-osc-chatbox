@@ -20,7 +20,7 @@ class OpenAIConfig:
 @dataclass
 class BaseConfig:
     logging_level: str = "INFO"
-    host: str = "127.0.0.1"
+    host: str = "0.0.0.0"
     port: int = 8000
     osc_host: str = "127.0.0.1"
     osc_port: int = 9000
