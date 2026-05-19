@@ -16,3 +16,7 @@ class OSCClient:
         log_msg = message.replace("\n", "\\n")
         logger.debug(f"Sending to OSC: {log_msg}")
         self.client.send_message("/chatbox/input", [message, bypass_keyboard, notify])
+
+    def chatbox_typing(self, is_typing: bool = True):
+        logger.debug(f"Sending to OSC: {is_typing}")
+        self.client.send_message("/chatbox/typing", [is_typing])

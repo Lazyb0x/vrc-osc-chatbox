@@ -135,9 +135,22 @@ const sendWSMessage = (data: Record<string, unknown>): boolean => {
 const submitMsg = (msg: string) => {
   const processedText = autoCutActive.value ? processText(msg, cutCount.value) : msg
 
-  sendWSMessage({ data: processedText, realtime: realTimeActive.value })
+  const msgObj: Record<string, unknown> = {
+    data: processedText,
+    realtime: realTimeActive.value
+  }
+
+  // 非实时输入时发送 关闭输入中状态
+  if (!realTimeActive.value) {
+    msgObj.typing = false
+  }
+  sendWSMessage(msgObj)
 
   return processedText
+}
+
+const submitTyping = (typing: boolean = true) => {
+  sendWSMessage({ typing: typing })
 }
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
@@ -157,16 +170,21 @@ const handleCompositionEnd = () => {
 }
 
 const handleChange = (value: string) => {
-  if (!realTimeActive.value) {
-    return
-  }
 
   if (debounceTimer) {
     clearTimeout(debounceTimer)
   }
 
   debounceTimer = setTimeout(() => {
-    submitMsg(value)
+    if (realTimeActive.value) {
+      // 实时输入时发送消息
+      submitMsg(value)
+    } else {
+      // 发送输入中状态
+      if (value.length > 0) {
+        submitTyping()
+      }
+    }
   }, 500)
 }
 

@@ -1,10 +1,11 @@
-from dataclasses import dataclass
 import logging
+from dataclasses import dataclass
 
 import pyperclip
 
 from vrcchatbox.config import Config
 from vrcchatbox.handler import MsgContext, build_pipeline
+from vrcchatbox.osc_client import OSCClient
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +17,7 @@ class Message:
     realtime: bool | None = None
     clipboard: str | None = None
     languages: list[str] | None = None
+    typing: bool | None = None
 
     @staticmethod
     def from_dict(data: dict) -> "Message":
@@ -25,6 +27,7 @@ class Message:
             realtime=data.get("realtime"),
             clipboard=data.get("clipboard"),
             languages=data.get("languages"),
+            typing=data.get("typing"),
         )
 
 
@@ -34,14 +37,12 @@ class MessageProcessor:
     def __init__(self, config: Config):
         self.config = config
         self.pipeline = build_pipeline(config)
+        self.osc_client = OSCClient(config.base.osc_host, config.base.osc_port)
 
     async def process(self, message: Message):
         param: dict = {}
         # 翻译开关切换
-        if (
-            message.translation is not None
-            and self.config.translate.enable != message.translation
-        ):
+        if message.translation is not None and self.config.translate.enable != message.translation:
             logger.info(f"Translation changed to {message.translation}")
             self.config.translate.enable = message.translation
         # 翻译语言切换
@@ -56,10 +57,14 @@ class MessageProcessor:
         if message.clipboard is not None:
             pyperclip.copy(message.clipboard)
             logger.info(f"Copied to clipboard: {message.clipboard}")
+        # 输入中提示
+        if message.typing is not None:
+            self.osc_client.chatbox_typing(is_typing=message.typing)
 
         if message.data is None:
             return
         ctx = MsgContext(text=message.data, param=param)
         async for result in self.pipeline.process(ctx):
+            self.osc_client.chatbox_input(result.text)
             yield result.text
         return

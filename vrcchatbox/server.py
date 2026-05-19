@@ -17,7 +17,6 @@ from starlette.websockets import WebSocketDisconnect
 
 from vrcchatbox.config import Config
 from vrcchatbox.message import Message, MessageProcessor
-from vrcchatbox.osc_client import OSCClient
 from vrcchatbox.utils.logger import get_log_config
 from vrcchatbox.utils.netutil import IpInfo, get_ip_address
 
@@ -39,7 +38,6 @@ def create_app(config: Config, host: str, port: int, osc_host: str, osc_port: in
         logger.info("Shutting down web server")
 
     app = FastAPI(root_path="/api", lifespan=lifespan)
-    osc_client = OSCClient(osc_host, osc_port)
     message_processor = MessageProcessor(config=config)
 
     # ========== 全局异常处理器 ==========
@@ -78,7 +76,6 @@ def create_app(config: Config, host: str, port: int, osc_host: str, osc_port: in
 
                 async def backgroud_task():
                     async for processed_text in message_processor.process(message):
-                        osc_client.chatbox_input(processed_text)
                         response = json.dumps(
                             {
                                 "data": processed_text,
