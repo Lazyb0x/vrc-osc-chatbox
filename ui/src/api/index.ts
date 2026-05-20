@@ -32,3 +32,21 @@ async function apiFetch<T>(endpoint: string): Promise<T> {
 export function getIpInfo(): Promise<IpInfoData> {
   return apiFetch<IpInfoData>('/api/ip-info')
 }
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type ConfigData = Record<string, any>
+
+export function getConfig(): Promise<ConfigData> {
+  return apiFetch<ConfigData>('/api/config')
+}
+
+export async function saveConfig(data: ConfigData): Promise<void> {
+  const res = await fetch('/api/config', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}: ${res.statusText}`)
+  }
+}

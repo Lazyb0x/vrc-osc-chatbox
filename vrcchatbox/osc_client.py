@@ -6,6 +6,7 @@ logger = logging.getLogger(__name__)
 
 
 class OSCClient:
+    """https://docs.vrchat.com/docs/osc-as-input-controller#chatbox"""
 
     def __init__(self, host: str, port: int):
         self.ip = host

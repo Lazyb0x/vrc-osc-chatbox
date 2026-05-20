@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { darkTheme, NConfigProvider, NTabs, NTab } from 'naive-ui'
+import { darkTheme, NConfigProvider, NMessageProvider, NTabs, NTab } from 'naive-ui'
 import type { GlobalTheme } from 'naive-ui'
 import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
@@ -29,19 +29,21 @@ const handleTabUpdate = (value: string) => {
 
 <template>
   <n-config-provider :theme="theme">
-    <div class="app-shell">
-      <n-tabs
-        :value="route.path"
-        type="line"
-        justify-content="space-evenly"
-        @update:value="handleTabUpdate"
-      >
-        <n-tab name="/" tab="文本输入" />
-        <n-tab name="/connect" tab="访问" />
-        <n-tab name="/config" tab="配置" />
-      </n-tabs>
-      <router-view />
-    </div>
+    <n-message-provider placement="bottom">
+      <div class="app-shell">
+        <n-tabs
+          :value="route.path"
+          type="line"
+          justify-content="space-evenly"
+          @update:value="handleTabUpdate"
+        >
+          <n-tab name="/" tab="文本输入" />
+          <n-tab name="/connect" tab="访问" />
+          <n-tab name="/config" tab="配置" />
+        </n-tabs>
+        <router-view />
+      </div>
+    </n-message-provider>
   </n-config-provider>
 </template>
 

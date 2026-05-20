@@ -1,6 +1,6 @@
 import logging
 import os
-from dataclasses import dataclass, field, fields
+from dataclasses import asdict, dataclass, field, fields
 
 from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedMap
@@ -83,6 +83,27 @@ class Config:
         with open(self.file_path, "w", encoding="utf-8") as f:
             self.yaml.dump(self._data, f)
 
+    def to_dict(self) -> dict:
+        return {
+            "base": asdict(self.base),
+            "openai": asdict(self.openai),
+            "translate": asdict(self.translate),
+        }
+
+    def update_from_dict(self, data: dict[str, dict]):
+        """从 dict 更新配置对象"""
+        config_dict = {"base": self.base, "openai": self.openai, "translate": self.translate}
+        for config_key, config_obj in config_dict.items():
+            update_dict = data.get(config_key, None)
+            if not update_dict:
+                continue
+            valid_fields = [f.name for f in fields(config_obj)]
+            for key, value in update_dict.items():
+                if key in valid_fields:
+                    setattr(config_obj, key, value)
+            pass
+        pass
+
     @staticmethod
     def _sync_to_commented_map(data: CommentedMap, key: str, dataclass_obj) -> None:
         """确保 section 存在，并将 dataclass 字段逐一写入，保留注释。"""
@@ -136,7 +157,7 @@ class Config:
             "model", before="翻译使用的模型，如 gpt-4o", indent=2
         )
         openai.yaml_set_comment_before_after_key(
-            "api_base", before="API 地址，使用代理时修改此项", indent=2
+            "api_base", before="翻译使用的 API 地址，OpenAI 格式", indent=2
         )
         openai.yaml_set_comment_before_after_key("api_key", before="API Key", indent=2)
         openai.yaml_set_comment_before_after_key("prompt", before="系统提示词", indent=2)
@@ -151,7 +172,9 @@ class Config:
         translate.yaml_set_comment_before_after_key(
             "languages", before="目标语言列表，如 [zh, en]", indent=2
         )
-        translate.yaml_set_comment_before_after_key("tools", before="翻译启用的 agent 工具", indent=2)
+        translate.yaml_set_comment_before_after_key(
+            "tools", before="翻译启用的 agent 工具", indent=2
+        )
 
         with open(file, "w", encoding="utf-8") as f:
             self.yaml.dump(self._data, f)

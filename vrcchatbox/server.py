@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 import uvicorn
-from fastapi import FastAPI, Request
+from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.websockets import WebSocket
 from pydantic import BaseModel
@@ -37,7 +37,8 @@ def create_app(config: Config, host: str, port: int, osc_host: str, osc_port: in
         yield
         logger.info("Shutting down web server")
 
-    app = FastAPI(root_path="/api", lifespan=lifespan)
+    app = FastAPI(lifespan=lifespan)
+    api_router = APIRouter(prefix="/api")
     message_processor = MessageProcessor(config=config)
 
     # ========== 全局异常处理器 ==========
@@ -51,10 +52,10 @@ def create_app(config: Config, host: str, port: int, osc_host: str, osc_port: in
         logger.error(f"Unhandled exception: {exc}", exc_info=True)
         return JSONResponse(
             status_code=500,
-            content={"error": "Internal server error", "detail": str(exc)},
+            content=ApiResponse(code=500, msg=str(exc)).model_dump(),
         )
 
-    @app.websocket("/oscws")
+    @api_router.websocket("/oscws")
     async def websocket_endpoint(websocket: WebSocket):
         await websocket.accept()
         # 建立连接时发送配置内容
@@ -90,7 +91,7 @@ def create_app(config: Config, host: str, port: int, osc_host: str, osc_port: in
             except WebSocketDisconnect:
                 break
 
-    @app.get("/ip-info")
+    @api_router.get("/ip-info")
     async def get_ip_info():
         ip_infos: list[IpInfo] = get_ip_address()
         return ApiResponse(
@@ -107,6 +108,18 @@ def create_app(config: Config, host: str, port: int, osc_host: str, osc_port: in
                 ],
             }
         )
+
+    @api_router.get("/config")
+    async def get_config():
+        return ApiResponse(data=config.to_dict())
+
+    @api_router.post("/config")
+    async def update_config(data: dict[str, dict]):
+        config.update_from_dict(data)
+        config.save()
+        return ApiResponse()
+
+    app.include_router(api_router)
 
     if getattr(sys, "frozen", False):
         static_dir = Path(sys._MEIPASS) / "static"

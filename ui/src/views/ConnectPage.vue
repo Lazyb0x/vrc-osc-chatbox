@@ -55,9 +55,8 @@ const copyAddress = async () => {
   <main>
     <!-- <n-space vertical> -->
     <n-card>
-      <p v-if="loading">加载中...</p>
-      <p v-else-if="error" style="color: red">{{ error }}</p>
-      <p v-else-if="options.length === 0">未找到可用网络</p>
+      <p v-if="!loading && error" style="color: red">{{ error }}</p>
+      <p v-if="!loading && options.length === 0">未找到可用网络</p>
 
       <template v-if="!loading && !error && options.length > 0">
         <n-space vertical align="center">
