@@ -15,7 +15,7 @@ import {
   NLog,
 } from 'naive-ui'
 import type { InputInst } from 'naive-ui'
-import { ref, shallowRef, onMounted, onUnmounted, watch } from 'vue'
+import { ref, shallowRef, onMounted, onActivated, onUnmounted, watch } from 'vue'
 
 const placeholders = [
   '请输入文本…',
@@ -34,11 +34,15 @@ const placeholders = [
 
 const MAX_INPUT_LENGTH = 200
 const PLACEHOLDER_WEIGHT = 0.5
+const REAL_TIME_INTERVAL = 1000
 
-const r = Math.random()
-const i = r < PLACEHOLDER_WEIGHT ? 0 : 1 +
-  Math.floor(((r - PLACEHOLDER_WEIGHT) / (1 - PLACEHOLDER_WEIGHT)) * (placeholders.length - 1))
-const placeholder = ref(placeholders[i])
+
+const getPlaceholderIndex = () => {
+  const r = Math.random()
+  return r < PLACEHOLDER_WEIGHT ? 0 : 1 +
+    Math.floor(((r - PLACEHOLDER_WEIGHT) / (1 - PLACEHOLDER_WEIGHT)) * (placeholders.length - 1))
+}
+const placeholder = ref(placeholders[getPlaceholderIndex()])
 
 const inputValue = ref('')
 const inputInstRef = ref<InputInst | null>(null)
@@ -50,7 +54,11 @@ const translationActive = ref(false)
 const cutCount = ref(2)
 const currText = shallowRef('')
 const isCompositing = ref(false)
+const compositionValue = ref('')
 const translationLanguages = ref(['en'])
+
+const lastSentValue = ref('')
+let lastTypingSentTime = 0
 
 watch(inputValue, (newVal) => {
   if (newVal.length > MAX_INPUT_LENGTH) {
@@ -108,7 +116,13 @@ onMounted(() => {
   inputInstRef.value?.focus()
 })
 
+onActivated(() => {
+  inputInstRef.value?.focus()
+  placeholder.value = placeholders[getPlaceholderIndex()]
+})
+
 onUnmounted(() => {
+  stopRealTimeInterval()
   if (reconnectTimer !== null) {
     clearInterval(reconnectTimer)
   }
@@ -125,9 +139,7 @@ const undoClick = () => {
 
 const clearClick = () => {
   clear()
-  if (realTimeActive.value == false) {
-    submitMsg('')
-  }
+  submitMsg('')
 }
 
 const clear = () => {
@@ -140,6 +152,7 @@ const clear = () => {
 
 const submit = () => {
   submitMsg(inputValue.value)
+  lastSentValue.value = ''
   clear()
 }
 
@@ -174,43 +187,67 @@ const submitTyping = (typing: boolean = true) => {
   sendWSMessage({ typing: typing })
 }
 
-let debounceTimer: ReturnType<typeof setTimeout> | null = null
+let realTimeTimer: ReturnType<typeof setInterval> | null = null
 let reconnectTimer: ReturnType<typeof setInterval> | null = null
+
+const startRealTimeInterval = () => {
+  stopRealTimeInterval()
+  realTimeTimer = setInterval(() => {
+    const currentText = inputValue.value + (isCompositing.value ? compositionValue.value : '')
+    if (currentText === lastSentValue.value) return
+    submitMsg(currentText)
+    lastSentValue.value = currentText
+  }, REAL_TIME_INTERVAL)
+}
+
+const stopRealTimeInterval = () => {
+  if (realTimeTimer !== null) {
+    clearInterval(realTimeTimer)
+    realTimeTimer = null
+  }
+}
+
+watch(realTimeActive, (active) => {
+  if (active) {
+    lastSentValue.value = inputValue.value
+    submitMsg(inputValue.value)
+    startRealTimeInterval()
+  } else {
+    stopRealTimeInterval()
+    lastSentValue.value = ''
+  }
+})
 
 const handleCompositionStart = () => {
   isCompositing.value = true
 }
 
 const handleCompositionUpdate = (e: CompositionEvent) => {
-  handleChange(inputValue.value + e.data)
+  compositionValue.value = e.data
 }
 
 const handleCompositionEnd = () => {
   isCompositing.value = false
-  handleChange(inputValue.value)
+  compositionValue.value = ''
 }
 
 const handleChange = (value: string) => {
-
-  if (debounceTimer) {
-    clearTimeout(debounceTimer)
+  if (realTimeActive.value) {
+    // 实时模式：由 interval 轮询处理发送
+    return
   }
-
-  debounceTimer = setTimeout(() => {
-    if (realTimeActive.value) {
-      // 实时输入时发送消息
-      submitMsg(value)
-    } else {
-      // 发送输入中状态
-      if (value.length > 0) {
-        submitTyping()
-      }
+  // 非实时模式：节流发送输入中状态，最多每2秒一次
+  if (value.length > 0) {
+    const now = Date.now()
+    if (now - lastTypingSentTime >= 2000) {
+      submitTyping(true)
+      lastTypingSentTime = now
     }
-  }, 500)
+  }
 }
 
 const handleKeydown = (e: KeyboardEvent) => {
-  if (e.key === 'Enter' && !e.shiftKey) {
+  if (e.key === 'Enter' && e.ctrlKey) {
     e.preventDefault()
     if (!realTimeActive.value) {
       submit()
@@ -300,7 +337,8 @@ function processText(input: string, cutCount: number = 2): string {
               <n-button @click="copyClick">复制</n-button>
             </n-space>
             <n-space justify="end">
-              <n-button type="primary" @click="submit" :disabled="realTimeActive">提交</n-button></n-space>
+              <n-button type="primary" @click="submit" :disabled="realTimeActive"
+                title="Ctrl + Enter">提交</n-button></n-space>
           </n-space>
         </n-card>
         <div style="margin-top: 1em">

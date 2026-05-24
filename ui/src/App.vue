@@ -41,7 +41,11 @@ const handleTabUpdate = (value: string) => {
           <n-tab name="/connect" tab="访问" />
           <n-tab name="/config" tab="配置" />
         </n-tabs>
-        <router-view />
+        <router-view v-slot="{ Component }">
+          <keep-alive include="TextInput">
+            <component :is="Component" />
+          </keep-alive>
+        </router-view>
       </div>
     </n-message-provider>
   </n-config-provider>

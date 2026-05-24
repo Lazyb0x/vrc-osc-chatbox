@@ -60,7 +60,7 @@ class TranslateHandler(MsgHandler):
 
     order: int = 20
 
-    def __init__(self, config: Config, debounce_seconds: float = 1):
+    def __init__(self, config: Config, debounce_seconds: float = 1.1):
         if config.translate.enable and not config.translate.languages:
             raise ValueError("No translation languages configured.")
         self.translate_config = config.translate
