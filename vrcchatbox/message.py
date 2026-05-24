@@ -34,10 +34,10 @@ class Message:
 class MessageProcessor:
     """消息加工与处理"""
 
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, osc_client: OSCClient):
         self.config = config
         self.pipeline = build_pipeline(config)
-        self.osc_client = OSCClient(config.base.osc_host, config.base.osc_port)
+        self.osc_client = osc_client
 
     async def process(self, message: Message):
         param: dict = {}

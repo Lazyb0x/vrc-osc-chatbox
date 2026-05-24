@@ -7,7 +7,7 @@ from vrcchatbox.osc_client import OSCClient
 
 def run_console(config: Config, ip: str, port: int):
     osc_client = OSCClient(ip, port)
-    message_processor = MessageProcessor(config)
+    message_processor = MessageProcessor(config, osc_client)
 
     buffer = []
     empty_count = 0
@@ -38,7 +38,6 @@ def run_console(config: Config, ip: str, port: int):
                             Message(data=msg, realtime=False)
                         ):
                             final_msg = out_msg
-                            osc_client.chatbox_input(out_msg)
                         print(final_msg)
 
                     asyncio.run(process_message())

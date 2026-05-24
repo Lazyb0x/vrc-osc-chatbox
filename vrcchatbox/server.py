@@ -3,7 +3,6 @@ import json
 import logging
 import sys
 import threading
-import webbrowser
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Optional
@@ -17,13 +16,14 @@ from starlette.websockets import WebSocketDisconnect
 
 from vrcchatbox.config import Config
 from vrcchatbox.message import Message, MessageProcessor
+from vrcchatbox.osc_client import OSCClient
 from vrcchatbox.utils.logger import get_log_config
 from vrcchatbox.utils.netutil import IpInfo, get_ip_address
 
 logger = logging.getLogger(__name__)
 
 
-def create_app(config: Config, host: str, port: int, osc_host: str, osc_port: int):
+def create_app(config: Config, message_processor: MessageProcessor):
 
     class ApiResponse(BaseModel):
         code: int = 0
@@ -32,14 +32,11 @@ def create_app(config: Config, host: str, port: int, osc_host: str, osc_port: in
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        # 启动完成后打开浏览器
-        threading.Timer(1, lambda: webbrowser.open(f"http://{host}:{port}")).start()
         yield
         logger.info("Shutting down web server")
 
     app = FastAPI(lifespan=lifespan)
     api_router = APIRouter(prefix="/api")
-    message_processor = MessageProcessor(config=config)
 
     # ========== 全局异常处理器 ==========
 
@@ -96,7 +93,7 @@ def create_app(config: Config, host: str, port: int, osc_host: str, osc_port: in
         ip_infos: list[IpInfo] = get_ip_address()
         return ApiResponse(
             data={
-                "port": port,
+                "port": config.base.port,
                 "ipInfos": [
                     {
                         "ip": ip_info.ip,
@@ -121,14 +118,14 @@ def create_app(config: Config, host: str, port: int, osc_host: str, osc_port: in
 
     app.include_router(api_router)
 
-    if getattr(sys, "frozen", False):
-        static_dir = Path(sys._MEIPASS) / "static"
-    else:
-        static_dir = Path(__file__).parent.parent / "static"
-
     # SPA fallback
     @app.get("/{full_path:path}")
     async def spa_fallback(full_path: str):
+        if getattr(sys, "frozen", False):
+            static_dir = Path(sys._MEIPASS) / "static"
+        else:
+            static_dir = Path(__file__).parent.parent / "static"
+
         target = static_dir / full_path
         if target.exists() and target.is_file():
             return FileResponse(target)
@@ -139,9 +136,10 @@ def create_app(config: Config, host: str, port: int, osc_host: str, osc_port: in
 
 def run_server(
     config: Config, host: str, port: int, osc_host: str, osc_port: int, block: bool = True
-) -> uvicorn.Server:
-    app = create_app(config, host, port, osc_host, osc_port)
-
+) -> tuple[uvicorn.Server, threading.Thread | None]:
+    osc_client = OSCClient(osc_host, osc_port)
+    message_processor = MessageProcessor(config, osc_client)
+    app = create_app(config, message_processor)
     uvicorn_config = uvicorn.Config(app, host=host, port=port, log_config=get_log_config())
     server = uvicorn.Server(uvicorn_config)
 
@@ -150,8 +148,8 @@ def run_server(
             server.run()
         except KeyboardInterrupt:
             pass
+        return server, None
     else:
         t = threading.Thread(target=server.run, daemon=True)
         t.start()
-
-    return server
+        return server, t

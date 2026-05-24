@@ -10,8 +10,8 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class OpenAIConfig:
-    model: str = "openai/gpt-4o"
-    api_base: str = "https://openrouter.ai/api/v1"
+    model: str = "deepseek-v4-flash"
+    api_base: str = "https://api.deepseek.com"
     api_key: str = None
     prompt: str = None
     thinking: bool | None = None

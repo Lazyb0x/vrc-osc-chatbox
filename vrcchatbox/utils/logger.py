@@ -1,37 +1,36 @@
 import logging
 import logging.config
-import os
 import sys
 from pathlib import Path
-
+from copy import deepcopy
 import yaml
 
+_log_config: dict | None = None
 
-def get_log_config():
+
+def _load_log_file() -> dict:
     if getattr(sys, "frozen", False):
         log_file = Path(sys._MEIPASS) / "logging.yml"
     else:
         log_file = Path(__file__).parent.parent.parent / "logging.yml"
-    with open(log_file, "r", encoding="utf-8") as f:
-        log_config = yaml.safe_load(f.read())
-    return log_config
+    try:
+        with open(log_file, "r", encoding="utf-8") as f:
+            return yaml.safe_load(f.read())
+    except FileNotFoundError:
+        raise FileNotFoundError(f"Logging config file not found: {log_file}")
+    except yaml.YAMLError as e:
+        raise ValueError(f"Invalid logging config file format: {e}")
 
 
-def setup_logger(logging_level: str = None):
-    log_config = get_log_config()
-
-    # 如果
-    file_handler_config = log_config.get("handlers", {}).get("file_handler", {})
-    filename = file_handler_config.get("filename")
-    if filename:
-        log_dir = Path(filename).parent
-        os.makedirs(log_dir, exist_ok=True)
-
-    if logging_level:
-        log_config["handlers"]["console_handler"]["level"] = logging_level
-
-    logging.config.dictConfig(log_config)
+def setup_logger(logging_level: str | None = None):
+    global _log_config
+    _log_config = _load_log_file()
+    if logging_level is not None:
+        _log_config["handlers"]["console_handler"]["level"] = logging_level
+    logging.config.dictConfig(_log_config)
 
 
-def get_logger(name):
-    return logging.getLogger(name)
+def get_log_config() -> dict:
+    if _log_config is None:
+        raise RuntimeError("Logger not initialized. Call setup_logger() first.")
+    return deepcopy(_log_config)

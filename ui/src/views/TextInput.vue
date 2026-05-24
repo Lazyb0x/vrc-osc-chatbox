@@ -17,9 +17,30 @@ import {
 import type { InputInst } from 'naive-ui'
 import { ref, shallowRef, onMounted, onUnmounted, watch } from 'vue'
 
-const inputValue = ref('')
-const MAX_INPUT_LENGTH = 200
+const placeholders = [
+  '请输入文本…',
+  '是啊，吃什么…',
+  '干嘛…',
+  '今晚的月色…',
+  '难道说…',
+  '那个…',
+  '呐…',
+  '黄瓜…',
+  '对吗…',
+  '不对…',
+  'a',
+  '然而，然而…',
+]
 
+const MAX_INPUT_LENGTH = 200
+const PLACEHOLDER_WEIGHT = 0.5
+
+const r = Math.random()
+const i = r < PLACEHOLDER_WEIGHT ? 0 : 1 +
+  Math.floor(((r - PLACEHOLDER_WEIGHT) / (1 - PLACEHOLDER_WEIGHT)) * (placeholders.length - 1))
+const placeholder = ref(placeholders[i])
+
+const inputValue = ref('')
 const inputInstRef = ref<InputInst | null>(null)
 const history = ref<string[]>([])
 const ws = ref<WebSocket | null>(null)
@@ -244,11 +265,12 @@ function processText(input: string, cutCount: number = 2): string {
     <n-grid x-gap="12" y-gap="12" cols="1" responsive="screen">
       <n-grid-item>
         <n-card>
-          <n-input ref="inputInstRef" v-model:value="inputValue" type="textarea" placeholder="请输入文本..." :input-props="{
-            onCompositionstart: handleCompositionStart,
-            onCompositionupdate: handleCompositionUpdate,
-            onCompositionend: handleCompositionEnd,
-          }" @input="handleChange" @keydown="handleKeydown" :autosize="{ minRows: 5, maxRows: 10 }" />
+          <n-input ref="inputInstRef" v-model:value="inputValue" type="textarea" :placeholder="placeholder"
+            :input-props="{
+              onCompositionstart: handleCompositionStart,
+              onCompositionupdate: handleCompositionUpdate,
+              onCompositionend: handleCompositionEnd,
+            }" @input="handleChange" @keydown="handleKeydown" :autosize="{ minRows: 5, maxRows: 10 }" />
           <n-scrollbar x-scrollable trigger="none" style="margin-top: 1em">
             <n-form inline label-placement="left" label-width="auto" require-mark-placement="right-hanging">
               <n-form-item label="实时输入" style="padding-right: 10px">

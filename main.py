@@ -4,8 +4,8 @@ import logging
 
 from vrcchatbox.config import Config
 from vrcchatbox.console import run_console
+from vrcchatbox.gui import run_gui
 from vrcchatbox.server import run_server
-from vrcchatbox.tray import run_tray
 from vrcchatbox.utils.logger import setup_logger
 
 logger = logging.getLogger(__name__)
@@ -36,11 +36,12 @@ def main():
     if args.console:
         run_console(config, osc_host, osc_port)
     elif args.serve:
-        run_server(config, host, port, osc_host, osc_port)
+        run_server(config, host, port, osc_host, osc_port, block=True)
     else:
-        server = run_server(config, host, port, osc_host, osc_port, block=False)
-        logger.info("Server started in tray mode")
-        run_tray(config, host, port, on_exit=lambda: setattr(server, "should_exit", True))
+        server, thread = run_server(config, host, port, osc_host, osc_port, block=False)
+        run_gui(port, debug=args.debug)
+        server.should_exit = True
+        thread.join()
 
 
 if __name__ == "__main__":
