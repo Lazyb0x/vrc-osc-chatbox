@@ -23,7 +23,7 @@ from vrcchatbox.utils.netutil import IpInfo, get_ip_address
 logger = logging.getLogger(__name__)
 
 
-def create_app(config: Config, message_processor: MessageProcessor):
+def create_app(config: Config, host: str, port: int, message_processor: MessageProcessor):
 
     class ApiResponse(BaseModel):
         code: int = 0
@@ -93,7 +93,7 @@ def create_app(config: Config, message_processor: MessageProcessor):
         ip_infos: list[IpInfo] = get_ip_address()
         return ApiResponse(
             data={
-                "port": config.base.port,
+                "port": port,
                 "ipInfos": [
                     {
                         "ip": ip_info.ip,
@@ -139,7 +139,7 @@ def run_server(
 ) -> tuple[uvicorn.Server, threading.Thread | None]:
     osc_client = OSCClient(osc_host, osc_port)
     message_processor = MessageProcessor(config, osc_client)
-    app = create_app(config, message_processor)
+    app = create_app(config, host, port, message_processor)
     uvicorn_config = uvicorn.Config(app, host=host, port=port, log_config=get_log_config())
     server = uvicorn.Server(uvicorn_config)
 

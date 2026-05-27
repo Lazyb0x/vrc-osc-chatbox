@@ -7,6 +7,7 @@ from vrcchatbox.console import run_console
 from vrcchatbox.gui import run_gui
 from vrcchatbox.server import run_server
 from vrcchatbox.utils.logger import setup_logger
+from vrcchatbox.utils.netutil import find_available_port
 
 logger = logging.getLogger(__name__)
 
@@ -29,9 +30,9 @@ def main():
     atexit.register(config.save)
 
     host = args.server_host or config.base.host
-    port = args.server_port or config.base.port
-    osc_host = args.osc_host or config.base.osc_host
-    osc_port = args.osc_port or config.base.osc_port
+    port = find_available_port(host, args.server_port or config.base.port)
+    osc_host = config.base.osc_host = args.osc_host or config.base.osc_host
+    osc_port = config.base.osc_port = args.osc_port or config.base.osc_port
 
     if args.console:
         run_console(config, osc_host, osc_port)
