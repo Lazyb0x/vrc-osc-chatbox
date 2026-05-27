@@ -13,7 +13,17 @@ import {
   NFormItem,
   NScrollbar,
   NLog,
+  NIcon,
+  NPopover,
 } from 'naive-ui'
+import {
+  ArrowUndoOutline,
+  CopyOutline,
+  LockClosed,
+  LockOpenOutline,
+  TrashOutline,
+  Send,
+} from '@vicons/ionicons5'
 import type { InputInst } from 'naive-ui'
 import { ref, shallowRef, onMounted, onActivated, onUnmounted, watch } from 'vue'
 
@@ -35,6 +45,7 @@ const placeholders = [
 const MAX_INPUT_LENGTH = 200
 const PLACEHOLDER_WEIGHT = 0.5
 const REAL_TIME_INTERVAL = 1000
+const PIN_INTERVAL = 5000
 
 
 const getPlaceholderIndex = () => {
@@ -51,6 +62,7 @@ const ws = ref<WebSocket | null>(null)
 const realTimeActive = ref(false)
 const autoCutActive = ref(false)
 const translationActive = ref(false)
+const pinned = ref(false)
 const cutCount = ref(2)
 const currText = shallowRef('')
 const isCompositing = ref(false)
@@ -123,6 +135,7 @@ onActivated(() => {
 
 onUnmounted(() => {
   stopRealTimeInterval()
+  stopPinnedInterval()
   if (reconnectTimer !== null) {
     clearInterval(reconnectTimer)
   }
@@ -189,6 +202,7 @@ const submitTyping = (typing: boolean = true) => {
 
 let realTimeTimer: ReturnType<typeof setInterval> | null = null
 let reconnectTimer: ReturnType<typeof setInterval> | null = null
+let pinnedTimer: ReturnType<typeof setInterval> | null = null
 
 const startRealTimeInterval = () => {
   stopRealTimeInterval()
@@ -207,6 +221,21 @@ const stopRealTimeInterval = () => {
   }
 }
 
+const startPinnedInterval = () => {
+  stopPinnedInterval()
+  submitMsg(inputValue.value)
+  pinnedTimer = setInterval(() => {
+    submitMsg(inputValue.value)
+  }, PIN_INTERVAL)
+}
+
+const stopPinnedInterval = () => {
+  if (pinnedTimer !== null) {
+    clearInterval(pinnedTimer)
+    pinnedTimer = null
+  }
+}
+
 watch(realTimeActive, (active) => {
   if (active) {
     lastSentValue.value = inputValue.value
@@ -215,6 +244,14 @@ watch(realTimeActive, (active) => {
   } else {
     stopRealTimeInterval()
     lastSentValue.value = ''
+  }
+})
+
+watch(pinned, (active) => {
+  if (active) {
+    startPinnedInterval()
+  } else {
+    stopPinnedInterval()
   }
 })
 
@@ -256,6 +293,9 @@ const handleKeydown = (e: KeyboardEvent) => {
 }
 
 const handleTranslationActiveChange = (active: boolean) => {
+  if (active) {
+    pinned.value = false
+  }
   sendWSMessage({ translation: active })
 }
 
@@ -310,20 +350,21 @@ function processText(input: string, cutCount: number = 2): string {
             }" @input="handleChange" @keydown="handleKeydown" :autosize="{ minRows: 5, maxRows: 10 }" />
           <n-scrollbar x-scrollable trigger="none" style="margin-top: 1em">
             <n-form inline label-placement="left" label-width="auto" require-mark-placement="right-hanging">
-              <n-form-item label="实时输入" style="padding-right: 10px">
+              <n-form-item label="实时输入">
                 <n-switch v-model:value="realTimeActive" />
+              </n-form-item>
+              <n-form-item label="自动截取" v-show="realTimeActive" style="padding-left: 40px;padding-right: 10px">
+                <n-switch v-model:value="autoCutActive" />
               </n-form-item>
               <n-form-item label="翻译" style="padding-right: 40px">
                 <n-switch v-model:value="translationActive" @update:value="handleTranslationActiveChange" />
-              </n-form-item>
-              <n-form-item label="自动截取" style="padding-right: 40px">
-                <n-switch v-model:value="autoCutActive" />
               </n-form-item>
             </n-form>
           </n-scrollbar>
           <n-form label-placement="left" label-width="auto">
             <n-form-item label="翻译语言" v-show="translationActive">
-              <n-dynamic-tags v-model:value="translationLanguages" :max="3" @update:value="handleLanguageChange" />
+              <n-dynamic-tags v-model:value="translationLanguages" :closable="translationLanguages.length > 1" :max="3"
+                @update:value="handleLanguageChange" />
             </n-form-item>
             <n-form-item label="截取句数" v-show="autoCutActive" style="padding-right: 100px">
               <n-input-number v-model:value="cutCount" :min="1" size="small" style="flex-shrink: 0; width: 80px" />
@@ -332,13 +373,61 @@ function processText(input: string, cutCount: number = 2): string {
 
           <n-space justify="space-between">
             <n-space>
-              <n-button @click="undoClick">撤销</n-button>
-              <n-button @click="clearClick">清除</n-button>
-              <n-button @click="copyClick">复制</n-button>
+              <n-popover trigger="hover" placement="bottom">
+                <template #trigger>
+                  <n-button @click="undoClick">
+                    <n-icon>
+                      <ArrowUndoOutline />
+                    </n-icon>
+                  </n-button>
+                </template>
+                <span>撤销</span>
+              </n-popover>
+              <n-popover trigger="hover" placement="bottom">
+                <template #trigger>
+                  <n-button @click="clearClick">
+                    <n-icon>
+                      <TrashOutline />
+                    </n-icon>
+                  </n-button>
+                </template>
+                <span>清除</span>
+              </n-popover>
+              <n-popover trigger="hover" placement="bottom">
+                <template #trigger>
+                  <n-button @click="copyClick">
+                    <n-icon size="13">
+                      <CopyOutline />
+                    </n-icon>
+                  </n-button>
+                </template>
+                <span>复制</span>
+              </n-popover>
+              <n-popover trigger="hover" placement="bottom">
+                <template #trigger>
+                  <n-button :type="pinned ? 'primary' : 'default'" @click="pinned = !pinned"
+                    :disabled="translationActive">
+                    <n-icon>
+                      <LockClosed v-if="pinned" />
+                      <LockOpenOutline v-else />
+                    </n-icon>
+                  </n-button>
+                </template>
+                <span>{{ pinned ? '已固定' : '固定' }}</span>
+              </n-popover>
             </n-space>
             <n-space justify="end">
-              <n-button type="primary" @click="submit" :disabled="realTimeActive"
-                title="Ctrl + Enter">提交</n-button></n-space>
+              <n-popover trigger="hover" placement="bottom">
+                <template #trigger>
+                  <n-button type="primary" @click="submit" :disabled="realTimeActive">
+                    <n-icon>
+                      <Send />
+                    </n-icon>
+                  </n-button>
+                </template>
+                <span>发送 (Ctrl + Enter)</span>
+              </n-popover>
+            </n-space>
           </n-space>
         </n-card>
         <div style="margin-top: 1em">
