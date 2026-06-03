@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from dataclasses import dataclass, replace
-from typing import AsyncGenerator, List, Type
+from typing import Any, AsyncGenerator, Callable, List, Type
 
 from vrcchatbox.agent import TranslateAgent
 from vrcchatbox.config import Config
@@ -28,10 +28,10 @@ class MsgHandler:
 
 
 # 全局 handler 注册表
-HANDLER_REGISTRY: dict[str, Type[MsgHandler]] = {}
+HANDLER_REGISTRY: dict[str, Any] = {}
 
 
-def msg_register(name: str) -> callable:
+def msg_register(name: str) -> Callable[[Type[MsgHandler]], Type[MsgHandler]]:
     def decorator(cls: Type[MsgHandler]) -> Type[MsgHandler]:
         HANDLER_REGISTRY[name] = cls
         return cls

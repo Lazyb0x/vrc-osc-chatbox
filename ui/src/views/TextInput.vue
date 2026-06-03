@@ -23,9 +23,11 @@ import {
   LockOpenOutline,
   TrashOutline,
   Send,
+  Mic,
+  MicOff,
 } from '@vicons/ionicons5'
 import type { InputInst } from 'naive-ui'
-import { ref, shallowRef, onMounted, onActivated, onUnmounted, watch } from 'vue'
+import { ref, shallowRef, computed, onMounted, onActivated, onUnmounted, watch, nextTick } from 'vue'
 
 const placeholders = [
   '请输入文本…',
@@ -71,6 +73,22 @@ const translationLanguages = ref(['en'])
 
 const lastSentValue = ref('')
 let lastTypingSentTime = 0
+
+// ===== ASR 语音识别状态 =====
+const asrState = ref<'idle' | 'recording' | 'processing'>('idle')
+const interimText = ref('')
+let asrWS: WebSocket | null = null
+let audioCtx: AudioContext | null = null
+let mediaStream: MediaStream | null = null
+let workletNode: AudioWorkletNode | null = null
+let gainNode: GainNode | null = null
+let mediaSourceNode: MediaStreamAudioSourceNode | null = null
+
+const micTooltip = computed(() => {
+  if (asrState.value === 'recording') return '停止录音'
+  if (asrState.value === 'processing') return '处理中...'
+  return '语音输入'
+})
 
 watch(inputValue, (newVal) => {
   if (newVal.length > MAX_INPUT_LENGTH) {
@@ -140,6 +158,7 @@ onUnmounted(() => {
     clearInterval(reconnectTimer)
   }
   ws.value?.close()
+  cleanupAudioCapture()
 })
 
 const undoClick = () => {
@@ -315,6 +334,172 @@ const copyClick = () => {
   sendWSMessage({ clipboard: inputValue.value })
 }
 
+// ========== ASR 语音识别 ==========
+
+function connectASRWS(): WebSocket {
+  const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
+  const host = window.location.host
+  const ws = new WebSocket(`${protocol}://${host}/api/asr`)
+  asrWS = ws
+  return ws
+}
+
+async function startASRRecording() {
+  try {
+    // 1. 获取麦克风权限（不指定 sampleRate，让浏览器使用默认值）
+    mediaStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        channelCount: 1,
+        echoCancellation: true,
+        noiseSuppression: true,
+      },
+    })
+
+    // 2. 连接 ASR WebSocket
+    asrState.value = 'recording'
+    const ws = connectASRWS()
+
+    ws.onopen = async () => {
+      // 3. 创建 AudioContext（不指定 sampleRate，与浏览器默认一致）
+      audioCtx = new AudioContext()
+      mediaSourceNode = audioCtx.createMediaStreamSource(mediaStream!)
+
+      // 加载 AudioWorklet 模块并创建 processor（替代已废弃的 ScriptProcessorNode）
+      await audioCtx.audioWorklet.addModule('/asr-worklet.js')
+      workletNode = new AudioWorkletNode(audioCtx, 'asr-processor')
+      workletNode.port.onmessage = (event: MessageEvent<ArrayBuffer>) => {
+        if (ws.readyState !== WebSocket.OPEN) return
+        ws.send(event.data)
+      }
+
+      // 为了防止 Chromium 浏览器暂停无输出的音频图，
+      // 将 worklet 输出连接到 muted GainNode → destination
+      gainNode = audioCtx.createGain()
+      gainNode.gain.value = 0
+
+      mediaSourceNode.connect(workletNode)
+      workletNode.connect(gainNode)
+      gainNode.connect(audioCtx.destination)
+    }
+
+    ws.onmessage = (event: MessageEvent) => {
+      try {
+        const msg = JSON.parse(event.data)
+        if (msg.type === 'interim') {
+          interimText.value = msg.text
+        } else if (msg.type === 'final') {
+          interimText.value = ''
+          // 去掉末尾的 。或 .
+          const text = msg.text.replace(/[。.]$/, '')
+          inputValue.value = text
+          asrState.value = 'idle'
+          cleanupAudioCapture()
+        } else if (msg.type === 'error') {
+          console.error('ASR error:', msg.text)
+          interimText.value = `[语音识别错误: ${msg.text}]`
+          asrState.value = 'idle'
+          cleanupAudioCapture()
+        }
+      } catch (e) {
+        console.error('Failed to parse ASR message:', e)
+      }
+    }
+
+    ws.onerror = () => {
+      interimText.value = '[ASR 连接失败]'
+      asrState.value = 'idle'
+      cleanupAudioCapture()
+    }
+
+    ws.onclose = () => {
+      if (asrState.value === 'recording' || asrState.value === 'processing') {
+        asrState.value = 'idle'
+        interimText.value = ''
+        cleanupAudioCapture()
+      }
+    }
+  } catch (err) {
+    console.error('Mic access denied:', err)
+    asrState.value = 'idle'
+    interimText.value = '[麦克风访问被拒绝]'
+  }
+}
+
+function stopASRRecording() {
+  asrState.value = 'processing'
+
+  // 停止音频采集（不再发送 PCM 数据），但保留 WebSocket 等待 final 结果
+  stopAudioTracks()
+
+  // 发送 stop 命令
+  if (asrWS && asrWS.readyState === WebSocket.OPEN) {
+    asrWS.send(JSON.stringify({ action: 'stop' }))
+    // 超时保护：5 秒后强制重置状态
+    setTimeout(() => {
+      if (asrState.value === 'processing') {
+        asrState.value = 'idle'
+        interimText.value = ''
+        cleanupASRWS()
+      }
+    }, 5000)
+  } else {
+    cleanupASRWS()
+    asrState.value = 'idle'
+  }
+}
+
+function stopAudioTracks() {
+  // 1. 先停止麦克风 Track，立即释放系统硬件（麦克风指示灯消失）
+  if (mediaStream) {
+    mediaStream.getTracks().forEach((t) => t.stop())
+    mediaStream = null
+  }
+  // 2. 断开音频图节点
+  if (workletNode) {
+    workletNode.port.onmessage = null
+    workletNode.disconnect()
+    workletNode = null
+  }
+  if (gainNode) {
+    gainNode.disconnect()
+    gainNode = null
+  }
+  if (mediaSourceNode) {
+    mediaSourceNode.disconnect()
+    mediaSourceNode = null
+  }
+  // 3. 最后关闭 AudioContext（异步，但硬件已释放，不影响）
+  if (audioCtx) {
+    audioCtx.close()
+    audioCtx = null
+  }
+}
+
+function cleanupASRWS() {
+  if (asrWS) {
+    asrWS.onclose = null
+    asrWS.onerror = null
+    asrWS.onmessage = null
+    if (asrWS.readyState === WebSocket.OPEN || asrWS.readyState === WebSocket.CONNECTING) {
+      asrWS.close()
+    }
+    asrWS = null
+  }
+}
+
+function cleanupAudioCapture() {
+  stopAudioTracks()
+  cleanupASRWS()
+}
+
+function toggleMic() {
+  if (asrState.value === 'idle') {
+    startASRRecording()
+  } else {
+    stopASRRecording()
+  }
+}
+
 function processText(input: string, cutCount: number = 2): string {
   const sentenceRegex = /[^。！？.!?\n]+[。！？.!?\n]?/g
 
@@ -371,8 +556,8 @@ function processText(input: string, cutCount: number = 2): string {
             </n-form-item>
           </n-form>
 
-          <n-space justify="space-between">
-            <n-space>
+          <div class="action-bar">
+            <n-space class="action-left">
               <n-popover trigger="hover" placement="bottom">
                 <template #trigger>
                   <n-button @click="undoClick">
@@ -416,7 +601,19 @@ function processText(input: string, cutCount: number = 2): string {
                 <span>{{ pinned ? '已固定' : '固定' }}</span>
               </n-popover>
             </n-space>
-            <n-space justify="end">
+            <n-space class="action-right">
+              <n-popover trigger="hover" placement="bottom">
+                <template #trigger>
+                  <n-button :type="asrState === 'recording' ? 'error' : 'default'" :loading="asrState === 'processing'"
+                    :disabled="asrState === 'processing'" @click="toggleMic">
+                    <n-icon>
+                      <Mic v-if="asrState !== 'recording'" />
+                      <MicOff v-else />
+                    </n-icon>
+                  </n-button>
+                </template>
+                <span>{{ micTooltip }}</span>
+              </n-popover>
               <n-popover trigger="hover" placement="bottom">
                 <template #trigger>
                   <n-button type="primary" @click="submit" :disabled="realTimeActive">
@@ -428,7 +625,11 @@ function processText(input: string, cutCount: number = 2): string {
                 <span>发送 (Ctrl + Enter)</span>
               </n-popover>
             </n-space>
-          </n-space>
+          </div>
+          <!-- ASR 中间结果 -->
+          <div v-if="interimText && asrState !== 'idle'" class="asr-interim">
+            {{ interimText }}
+          </div>
         </n-card>
         <div style="margin-top: 1em">
           <n-card><n-log :log="currText" trim :rows="10"></n-log></n-card>
@@ -443,5 +644,29 @@ main {
   max-width: 720px;
   margin: 0 auto;
   padding: 12px 0px;
+}
+
+.asr-interim {
+  margin-top: 0.5em;
+  margin-bottom: 0;
+  padding: 0.5em 0.75em;
+  border-radius: 6px;
+  background: rgba(128, 128, 128, 0.1);
+  color: var(--n-text-color-3, #888);
+  font-size: 0.9em;
+  line-height: 1.4;
+  min-height: 1.4em;
+}
+
+.action-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1em;
+}
+
+.action-right {
+  margin-left: auto;
 }
 </style>

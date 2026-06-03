@@ -10,7 +10,7 @@ _log_config: dict | None = None
 
 def _load_log_file() -> dict:
     if getattr(sys, "frozen", False):
-        log_file = Path(sys._MEIPASS) / "logging.yml"
+        log_file = Path(getattr(sys, "_MEIPASS", "")) / "logging.yml"
     else:
         log_file = Path(__file__).parent.parent.parent / "logging.yml"
     try:

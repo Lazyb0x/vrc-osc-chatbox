@@ -33,6 +33,11 @@ class TranslateConfig:
     tools: list[str] | None = None
 
 
+@dataclass
+class ASRSettings:
+    credential_path: str = "./asr-credentials.json"
+
+
 class Config:
     def __init__(self, file_path: str = None):
         self.yaml = YAML()
@@ -42,6 +47,7 @@ class Config:
         self.base: BaseConfig = BaseConfig()
         self.openai: OpenAIConfig = OpenAIConfig()
         self.translate: TranslateConfig = TranslateConfig()
+        self.asr: ASRSettings = ASRSettings()
         self.file_path: str = self._resolve_config_path(file_path)
 
     @staticmethod
@@ -70,6 +76,7 @@ class Config:
         self.base = BaseConfig(**self._data.get("base", {}))
         self.openai = OpenAIConfig(**self._data.get("openai", {}))
         self.translate = TranslateConfig(**self._data.get("translate", {}))
+        self.asr = ASRSettings(**self._data.get("asr", {}))
 
     def save(self):
         if self._data is None:
@@ -78,6 +85,7 @@ class Config:
         self._sync_to_commented_map(self._data, "base", self.base)
         self._sync_to_commented_map(self._data, "openai", self.openai)
         self._sync_to_commented_map(self._data, "translate", self.translate)
+        self._sync_to_commented_map(self._data, "asr", self.asr)
 
         logger.info(f"Saving configuration to {self.file_path}")
         with open(self.file_path, "w", encoding="utf-8") as f:
@@ -88,11 +96,17 @@ class Config:
             "base": asdict(self.base),
             "openai": asdict(self.openai),
             "translate": asdict(self.translate),
+            "asr": asdict(self.asr),
         }
 
     def update_from_dict(self, data: dict[str, dict]):
         """从 dict 更新配置对象"""
-        config_dict = {"base": self.base, "openai": self.openai, "translate": self.translate}
+        config_dict = {
+            "base": self.base,
+            "openai": self.openai,
+            "translate": self.translate,
+            "asr": self.asr,
+        }
         for config_key, config_obj in config_dict.items():
             update_dict = data.get(config_key, None)
             if not update_dict:
@@ -140,6 +154,11 @@ class Config:
                         "languages": self.translate.languages,
                     }
                 ),
+                "asr": CommentedMap(
+                    {
+                        "credential_path": self.asr.credential_path,
+                    }
+                ),
             }
         )
 
@@ -174,6 +193,11 @@ class Config:
         )
         translate.yaml_set_comment_before_after_key(
             "tools", before="翻译启用的 agent 工具", indent=2
+        )
+
+        asr_section: CommentedMap = self._data["asr"]
+        asr_section.yaml_set_comment_before_after_key(
+            "credential_path", before="豆包输入法 ASR 凭据文件路径", indent=2
         )
 
         with open(file, "w", encoding="utf-8") as f:

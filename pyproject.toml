@@ -16,6 +16,7 @@ dependencies = [
     "pillow>=10.0.0",
     "ifaddr>=0.2.0",
     "pywebview>=6.2.1",
+    "doubaoime-asr",
 ]
 
 [project.scripts]
@@ -27,6 +28,9 @@ line-length = 100
 [tool.uv]
 package = true
 
+[tool.uv.sources]
+doubaoime-asr = { path = "doubaoime-asr", editable = true }
+
 [tool.setuptools]
 py-modules = ["main"]
 packages = ["vrcchatbox"]
@@ -35,6 +39,7 @@ packages = ["vrcchatbox"]
 dev = [
     "ipykernel>=7.2.0",
     "isort>=8.0.1",
+    "pyright>=1.1.410",
 ]
 build = [
     "pyinstaller>=6.0.0",

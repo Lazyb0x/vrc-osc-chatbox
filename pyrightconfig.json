@@ -1,0 +1,9 @@
+{
+    "extraPaths": [
+        "doubaoime-asr"
+    ],
+    "typeCheckingMode": "basic",
+    "reportAssignmentType": "none",
+    "reportArgumentType": "none",
+    "reportOptionalMemberAccess": "none"
+}

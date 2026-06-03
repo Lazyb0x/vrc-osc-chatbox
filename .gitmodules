@@ -1,0 +1,3 @@
+[submodule "doubaoime-asr"]
+	path = doubaoime-asr
+	url = https://github.com/Lazyb0x/doubaoime-asr.git

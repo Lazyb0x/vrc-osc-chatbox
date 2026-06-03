@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import json
 import logging
 import sys
@@ -19,6 +20,8 @@ from vrcchatbox.message import Message, MessageProcessor
 from vrcchatbox.osc_client import OSCClient
 from vrcchatbox.utils.logger import get_log_config
 from vrcchatbox.utils.netutil import IpInfo, get_ip_address
+
+from vrcchatbox.asr_service import asr_stream
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +91,64 @@ def create_app(config: Config, host: str, port: int, message_processor: MessageP
             except WebSocketDisconnect:
                 break
 
+    # ========== 语音识别 (ASR) WebSocket ==========
+
+    @api_router.websocket("/asr")
+    async def asr_websocket_endpoint(websocket: WebSocket):
+        await websocket.accept()
+
+        # 用队列解耦接收与发送
+        audio_queue: asyncio.Queue[bytes | None] = asyncio.Queue()
+
+        async def receive_audio():
+            try:
+                while True:
+                    msg = await websocket.receive()
+                    if msg["type"] == "websocket.receive":
+                        if "bytes" in msg:
+                            await audio_queue.put(msg["bytes"])
+                        elif "text" in msg:
+                            data = json.loads(msg["text"])
+                            if data.get("action") == "stop":
+                                await audio_queue.put(None)
+                                return
+                    else:
+                        break
+            except WebSocketDisconnect:
+                pass
+            except Exception:
+                logger.exception("ASR receive error")
+            finally:
+                await audio_queue.put(None)
+
+        async def audio_source():
+            while True:
+                chunk = await audio_queue.get()
+                if chunk is None:
+                    break
+                yield chunk
+
+        receive_task = asyncio.create_task(receive_audio())
+
+        try:
+            async for result in asr_stream(
+                audio_source(),
+                credential_path=config.asr.credential_path if hasattr(config, "asr") else None,
+            ):
+                await websocket.send_json(result)
+                if result["type"] == "error":
+                    break
+        except WebSocketDisconnect:
+            logger.info("ASR client disconnected")
+        except Exception as e:
+            logger.error(f"ASR endpoint error: {e}", exc_info=True)
+        finally:
+            receive_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await receive_task
+            with contextlib.suppress(Exception):
+                await websocket.close()
+
     @api_router.get("/ip-info")
     async def get_ip_info():
         ip_infos: list[IpInfo] = get_ip_address()
@@ -122,7 +183,7 @@ def create_app(config: Config, host: str, port: int, message_processor: MessageP
     @app.get("/{full_path:path}")
     async def spa_fallback(full_path: str):
         if getattr(sys, "frozen", False):
-            static_dir = Path(sys._MEIPASS) / "static"
+            static_dir = Path(getattr(sys, "_MEIPASS", "")) / "static"
         else:
             static_dir = Path(__file__).parent.parent / "static"
 
