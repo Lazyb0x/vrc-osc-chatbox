@@ -27,7 +27,7 @@ import {
   MicOff,
 } from '@vicons/ionicons5'
 import type { InputInst } from 'naive-ui'
-import { ref, shallowRef, computed, onMounted, onActivated, onUnmounted, watch, nextTick } from 'vue'
+import { ref, shallowRef, computed, onMounted, onActivated, onUnmounted, watch } from 'vue'
 
 const placeholders = [
   '请输入文本…',
@@ -386,14 +386,37 @@ async function startASRRecording() {
       try {
         const msg = JSON.parse(event.data)
         if (msg.type === 'interim') {
-          interimText.value = msg.text
+          if (realTimeActive.value) {
+            // 实时模式：直接更新文本框
+            inputValue.value = msg.text
+          } else {
+            // 非实时模式：显示在预览区
+            interimText.value = msg.text
+          }
         } else if (msg.type === 'final') {
           interimText.value = ''
           // 去掉末尾的 。或 .
           const text = msg.text.replace(/[。.]$/, '')
-          inputValue.value = text
-          asrState.value = 'idle'
-          cleanupAudioCapture()
+          if (realTimeActive.value) {
+            // 实时模式：更新文本框、提交并清空，继续录音
+            inputValue.value = text
+            submit()
+            // 如果是用户手动停止（processing），则清理并重置状态
+            if (asrState.value === 'processing') {
+              asrState.value = 'idle'
+              cleanupAudioCapture()
+            }
+            // 否则保持 recording 状态，继续接收语音
+          } else {
+            // 非实时模式：拼接到文本框末尾
+            if (inputValue.value) {
+              inputValue.value += text
+            } else {
+              inputValue.value = text
+            }
+            asrState.value = 'idle'
+            cleanupAudioCapture()
+          }
         } else if (msg.type === 'error') {
           console.error('ASR error:', msg.text)
           interimText.value = `[语音识别错误: ${msg.text}]`
@@ -627,7 +650,7 @@ function processText(input: string, cutCount: number = 2): string {
             </n-space>
           </div>
           <!-- ASR 中间结果 -->
-          <div v-if="interimText && asrState !== 'idle'" class="asr-interim">
+          <div v-if="interimText && asrState !== 'idle' && !realTimeActive" class="asr-interim">
             {{ interimText }}
           </div>
         </n-card>
