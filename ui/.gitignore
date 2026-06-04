@@ -34,3 +34,6 @@ coverage
 
 # Vitest
 __screenshots__/
+
+# Rime WASM files
+/public/rime

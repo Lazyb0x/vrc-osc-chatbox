@@ -32,6 +32,7 @@ export default defineConfig({
         manualChunks: {
           'naive-ui': ['naive-ui'],
           'vue-vendor': ['vue', 'vue-router'],
+          'zh-keyboard': ['@zh-keyboard/vue', '@zh-keyboard/pinyin'],
         },
       },
     },

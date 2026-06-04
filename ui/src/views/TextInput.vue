@@ -15,6 +15,9 @@ import {
   NLog,
   NIcon,
   NPopover,
+  NFloatButton,
+  NButtonGroup,
+  useMessage,
 } from 'naive-ui'
 import {
   ArrowUndoOutline,
@@ -24,10 +27,12 @@ import {
   TrashOutline,
   Send,
   Mic,
-  MicOff,
+  MicOutline,
 } from '@vicons/ionicons5'
 import type { InputInst } from 'naive-ui'
 import { ref, shallowRef, computed, onMounted, onActivated, onUnmounted, watch } from 'vue'
+import { ZhKeyboard } from '@zh-keyboard/vue'
+import '@zh-keyboard/vue/style.css'
 
 const placeholders = [
   '请输入文本…',
@@ -57,6 +62,7 @@ const getPlaceholderIndex = () => {
 }
 const placeholder = ref(placeholders[getPlaceholderIndex()])
 
+const message = useMessage()
 const inputValue = ref('')
 const inputInstRef = ref<InputInst | null>(null)
 const history = ref<string[]>([])
@@ -70,11 +76,23 @@ const currText = shallowRef('')
 const isCompositing = ref(false)
 const compositionValue = ref('')
 const translationLanguages = ref(['en'])
+const keyboardEnabled = ref(true)
+
+const keyboardOffIcon = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 18H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h2m4 0h10a2 2 0 0 1 2 2v8c0 .554-.226 1.056-.59 1.418"></path><path d="M6 10v.01"></path><path d="M10 10v.01"></path><path d="M14 10v.01"></path><path d="M18 10v.01"></path><path d="M6 14v.01"></path><path d="M18 14v.01"></path><path d="M10 14h4"></path><path d="M3 3l18 18"></path></g></svg>`
+const keyboardOnIcon = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="12" rx="2"></rect><path d="M6 7h0"></path><path d="M10 7h0"></path><path d="M14 7h0"></path><path d="M18 7h0"></path><path d="M6 11v.01"></path><path d="M18 11v.01"></path><path d="M10 11h4"></path><path d="M10 19l2 2l2-2"></path></g></svg>`
+
+const inputProps = computed<Record<string, unknown>>(() => ({
+  onCompositionstart: handleCompositionStart,
+  onCompositionupdate: handleCompositionUpdate,
+  onCompositionend: handleCompositionEnd,
+  ...(keyboardEnabled.value ? { inputmode: 'none', 'data-inputmode': 'zh' } : {}),
+}))
 
 const lastSentValue = ref('')
 let lastTypingSentTime = 0
 
 // ===== ASR 语音识别状态 =====
+const asrAvailable = ref(navigator.mediaDevices?.getUserMedia !== undefined)
 const asrState = ref<'idle' | 'recording' | 'processing'>('idle')
 const interimText = ref('')
 let asrWS: WebSocket | null = null
@@ -143,11 +161,11 @@ const checkAndReconnect = () => {
 onMounted(() => {
   connectWS()
   reconnectTimer = setInterval(checkAndReconnect, 10000)
-  inputInstRef.value?.focus()
+  // inputInstRef.value?.focus()
 })
 
 onActivated(() => {
-  inputInstRef.value?.focus()
+  // inputInstRef.value?.focus()
   placeholder.value = placeholders[getPlaceholderIndex()]
 })
 
@@ -443,8 +461,8 @@ async function startASRRecording() {
     }
   } catch (err) {
     console.error('Mic access denied:', err)
+    message.error(`麦克风访问被拒绝 (${err instanceof Error ? err.message : String(err)})`)
     asrState.value = 'idle'
-    interimText.value = '[麦克风访问被拒绝]'
   }
 }
 
@@ -551,11 +569,8 @@ function processText(input: string, cutCount: number = 2): string {
       <n-grid-item>
         <n-card>
           <n-input ref="inputInstRef" v-model:value="inputValue" type="textarea" :placeholder="placeholder"
-            :input-props="{
-              onCompositionstart: handleCompositionStart,
-              onCompositionupdate: handleCompositionUpdate,
-              onCompositionend: handleCompositionEnd,
-            }" @input="handleChange" @keydown="handleKeydown" :autosize="{ minRows: 5, maxRows: 10 }" />
+            :input-props="inputProps" @input="handleChange" @keydown="handleKeydown"
+            :autosize="{ minRows: 5, maxRows: 10 }" />
           <n-scrollbar x-scrollable trigger="none" style="margin-top: 1em">
             <n-form inline label-placement="left" label-width="auto" require-mark-placement="right-hanging">
               <n-form-item label="实时输入">
@@ -581,57 +596,59 @@ function processText(input: string, cutCount: number = 2): string {
 
           <div class="action-bar">
             <n-space class="action-left">
-              <n-popover trigger="hover" placement="bottom">
-                <template #trigger>
-                  <n-button @click="undoClick">
-                    <n-icon>
-                      <ArrowUndoOutline />
-                    </n-icon>
-                  </n-button>
-                </template>
-                <span>撤销</span>
-              </n-popover>
-              <n-popover trigger="hover" placement="bottom">
-                <template #trigger>
-                  <n-button @click="clearClick">
-                    <n-icon>
-                      <TrashOutline />
-                    </n-icon>
-                  </n-button>
-                </template>
-                <span>清除</span>
-              </n-popover>
-              <n-popover trigger="hover" placement="bottom">
-                <template #trigger>
-                  <n-button @click="copyClick">
-                    <n-icon size="13">
-                      <CopyOutline />
-                    </n-icon>
-                  </n-button>
-                </template>
-                <span>复制</span>
-              </n-popover>
-              <n-popover trigger="hover" placement="bottom">
-                <template #trigger>
-                  <n-button :type="pinned ? 'primary' : 'default'" @click="pinned = !pinned"
-                    :disabled="translationActive">
-                    <n-icon>
-                      <LockClosed v-if="pinned" />
-                      <LockOpenOutline v-else />
-                    </n-icon>
-                  </n-button>
-                </template>
-                <span>{{ pinned ? '已固定' : '固定' }}</span>
-              </n-popover>
+              <n-button-group>
+                <n-popover trigger="hover" placement="bottom">
+                  <template #trigger>
+                    <n-button @click="undoClick">
+                      <n-icon>
+                        <ArrowUndoOutline />
+                      </n-icon>
+                    </n-button>
+                  </template>
+                  <span>撤销</span>
+                </n-popover>
+                <n-popover trigger="hover" placement="bottom">
+                  <template #trigger>
+                    <n-button @click="clearClick">
+                      <n-icon>
+                        <TrashOutline />
+                      </n-icon>
+                    </n-button>
+                  </template>
+                  <span>清除</span>
+                </n-popover>
+                <n-popover trigger="hover" placement="bottom">
+                  <template #trigger>
+                    <n-button @click="copyClick">
+                      <n-icon size="13">
+                        <CopyOutline />
+                      </n-icon>
+                    </n-button>
+                  </template>
+                  <span>复制</span>
+                </n-popover>
+                <n-popover trigger="hover" placement="bottom">
+                  <template #trigger>
+                    <n-button :type="pinned ? 'primary' : 'default'" @click="pinned = !pinned"
+                      :disabled="translationActive">
+                      <n-icon>
+                        <LockClosed v-if="pinned" />
+                        <LockOpenOutline v-else />
+                      </n-icon>
+                    </n-button>
+                  </template>
+                  <span>{{ pinned ? '已固定' : '固定' }}</span>
+                </n-popover>
+              </n-button-group>
             </n-space>
             <n-space class="action-right">
-              <n-popover trigger="hover" placement="bottom">
+              <n-popover v-if="asrAvailable" trigger="hover" placement="bottom">
                 <template #trigger>
-                  <n-button :type="asrState === 'recording' ? 'error' : 'default'" :loading="asrState === 'processing'"
-                    :disabled="asrState === 'processing'" @click="toggleMic">
-                    <n-icon>
-                      <Mic v-if="asrState !== 'recording'" />
-                      <MicOff v-else />
+                  <n-button circle :type="asrState === 'recording' ? 'error' : 'default'"
+                    :disabled="asrState === 'processing'" @click="toggleMic" :quaternary="asrState !== 'recording'">
+                    <n-icon size="18">
+                      <MicOutline v-if="asrState !== 'recording'" />
+                      <Mic v-else />
                     </n-icon>
                   </n-button>
                 </template>
@@ -660,6 +677,16 @@ function processText(input: string, cutCount: number = 2): string {
       </n-grid-item>
     </n-grid>
   </main>
+  <ZhKeyboard v-if="keyboardEnabled" position="bottom" :enable-handwriting="false" />
+  <n-popover trigger="hover" placement="left">
+    <template #trigger>
+      <n-float-button :right="24" :bottom="24" @click="keyboardEnabled = !keyboardEnabled">
+        <span v-if="keyboardEnabled" v-html="keyboardOnIcon" style="display: flex; width: 24px; height: 24px"></span>
+        <span v-else v-html="keyboardOffIcon" style="display: flex; width: 24px; height: 24px"></span>
+      </n-float-button>
+    </template>
+    <span>{{ "虚拟键盘：" + (keyboardEnabled ? '开' : '关') }}</span>
+  </n-popover>
 </template>
 
 <style scoped>
@@ -691,5 +718,107 @@ main {
 
 .action-right {
   margin-left: auto;
+}
+</style>
+
+<style>
+.zhk {
+  max-width: 720px;
+  left: 0;
+  right: 0;
+  margin: 0 auto;
+  background-color: var(--background-color, #f7f8f9);
+}
+
+@media (prefers-color-scheme: dark) {
+  .zhk {
+    --background-color: #1e1e24;
+    background-color: #1e1e24;
+    --key-background-color: #2d2d36;
+    --key-text-color: #d0d0d8;
+    --border-color: #3a3a44;
+    --key-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --key-active-shadow: 0 0px 1px rgba(0, 0, 0, 0.2);
+    --primary-color: #4da3ff;
+    --function-key-color: #383842;
+    --disabled-key-color: #25252e;
+    --disabled-key-border-color: #33333c;
+    --disabled-key-text-color: #555;
+    --toggle-sub-color: #888;
+    --text-color: #c0c0c8;
+  }
+
+  /* 硬编码颜色的覆盖 */
+  .zhk .zhk-base__key:active {
+    background-color: #44444e;
+  }
+
+  .zhk .zhk-base__key--function {
+    color: #c0c0c8;
+  }
+
+  .zhk .zhk-base__key--function img {
+    filter: brightness(0) invert(0.85);
+  }
+
+  .zhk .zhk-base__key--space img {
+    filter: brightness(0) invert(0.85);
+  }
+
+  .zhk .symbol-keyboard__key--lock img {
+    filter: brightness(0) invert(0.85);
+  }
+
+  .zhk .zhk-candidate__more img {
+    filter: brightness(0) invert(0.85);
+  }
+
+  .zhk .symbol-keyboard__lang-btn {
+    color: #c0c0c8;
+  }
+
+  .zhk .zhk-selection__func-btn {
+    color: #c0c0c8;
+  }
+
+  .zhk .zhk-selection__func-btn:hover {
+    color: #2d2d3a;
+  }
+
+  .zhk .symbol-keyboard__lang-btn--active {
+    color: #fff;
+  }
+
+  .zhk .symbol-keyboard__key--back {
+    color: #c0c0c8;
+  }
+
+  .zhk .zhk-base__key--active {
+    color: #fff;
+  }
+
+  .zhk .zhk-base__key--active:active {
+    background-color: #3d8ed6;
+  }
+
+  .zhk .zhk-candidate-list__item:hover {
+    background-color: rgba(255, 255, 255, 0.06);
+  }
+
+  .zhk .zhk-selection {
+    background: #25252e;
+  }
+
+  .zhk .zhk-selection__text:hover {
+    background-color: #2d2d3a;
+  }
+
+  .zhk .zhkhw-canvas-container {
+    background: #2d2d36;
+  }
+
+  .zhk .zhk__disabled-overlay {
+    background-color: rgba(30, 30, 36, 0.85);
+  }
 }
 </style>
