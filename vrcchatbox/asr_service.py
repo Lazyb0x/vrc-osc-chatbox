@@ -2,7 +2,11 @@ import logging
 from os.path import expanduser
 from typing import AsyncIterator
 
-from doubaoime_asr import transcribe_realtime, ResponseType
+from vrcchatbox.platform import ensure_native_libs
+
+ensure_native_libs()
+
+from doubaoime_asr import ResponseType, transcribe_realtime
 from doubaoime_asr.config import ASRConfig
 
 logger = logging.getLogger(__name__)
@@ -22,6 +26,7 @@ async def asr_stream(
     Yields:
         {"type": "interim" | "final" | "error", "text": str}
     """
+
     if credential_path:
         credential_path = expanduser(credential_path)
 

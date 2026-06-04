@@ -19,3 +19,4 @@ static/
 
 # configuration files
 config.yml
+asr-credentials.json

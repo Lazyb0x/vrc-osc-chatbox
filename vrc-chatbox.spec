@@ -2,8 +2,10 @@
 
 a = Analysis(
     ["main.py"],
-    pathex=[],
-    binaries=[],
+    pathex=["doubaoime-asr"],
+    binaries=[
+        ("vrcchatbox/platform/_win32/opus.dll", "."),
+    ],
     datas=[
         ("static", "static"),
         ("logging.yml", "."),
@@ -12,6 +14,7 @@ a = Analysis(
         "pystray",
         "pystray._win32",
         "colorlog",
+        "doubaoime_asr",
     ],
     hookspath=[],
     hooksconfig={},
