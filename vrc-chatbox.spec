@@ -1,5 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+from vrcchatbox import __version__
+
 a = Analysis(
     ["main.py"],
     pathex=["doubaoime-asr"],
@@ -44,6 +46,7 @@ exe_console = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon=None,
+    version="file_version_info.txt",
 )
 
 # GUI 版本：无控制台（windowed）
@@ -63,6 +66,7 @@ exe_windowed = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon=None,
+    version="file_version_info.txt",
 )
 
 # COLLECT 把两个 exe 和所有共享依赖放进同一个输出目录
@@ -75,5 +79,5 @@ coll = COLLECT(
     strip=False,
     upx=False,
     upx_exclude=[],
-    name="vrc-chatbox",
+    name=f"vrc-chatbox-{__version__}",
 )

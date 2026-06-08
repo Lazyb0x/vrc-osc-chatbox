@@ -2,6 +2,7 @@ import argparse
 import atexit
 import logging
 
+from vrcchatbox import __version__
 from vrcchatbox.config import Config
 from vrcchatbox.console import run_console
 from vrcchatbox.gui import run_gui
@@ -22,6 +23,12 @@ def main():
     parser.add_argument("--server-host", help="Web server address")
     parser.add_argument("--server-port", type=int, help="Web server port")
     parser.add_argument("--debug", action="store_true", help="Enable debug mode")
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"vrc-chatbox {__version__}",
+        help="Show version and exit",
+    )
     args = parser.parse_args()
 
     setup_logger(logging_level="DEBUG" if args.debug else None)

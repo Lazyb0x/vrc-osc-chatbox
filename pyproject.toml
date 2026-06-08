@@ -1,6 +1,10 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "vrc-osc-chatbox"
-version = "0.1.0"
+dynamic = ["version"]
 description = "A simple command line chatbox input interface for VRChat using OSC."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -32,6 +36,9 @@ doubaoime-asr = { path = "doubaoime-asr", editable = true }
 [tool.setuptools]
 py-modules = ["main"]
 packages = ["vrcchatbox"]
+
+[tool.setuptools.dynamic]
+version = {attr = "vrcchatbox.__version__"}
 
 [dependency-groups]
 dev = [
