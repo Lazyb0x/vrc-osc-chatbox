@@ -24,7 +24,6 @@ import {
   CopyOutline,
   LockClosed,
   LockOpenOutline,
-  TrashOutline,
   Send,
   Mic,
   MicOutline,
@@ -80,6 +79,7 @@ const keyboardEnabled = ref(true)
 
 const keyboardOffIcon = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 18H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h2m4 0h10a2 2 0 0 1 2 2v8c0 .554-.226 1.056-.59 1.418"></path><path d="M6 10v.01"></path><path d="M10 10v.01"></path><path d="M14 10v.01"></path><path d="M18 10v.01"></path><path d="M6 14v.01"></path><path d="M18 14v.01"></path><path d="M10 14h4"></path><path d="M3 3l18 18"></path></g></svg>`
 const keyboardOnIcon = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="12" rx="2"></rect><path d="M6 7h0"></path><path d="M10 7h0"></path><path d="M14 7h0"></path><path d="M18 7h0"></path><path d="M6 11v.01"></path><path d="M18 11v.01"></path><path d="M10 11h4"></path><path d="M10 19l2 2l2-2"></path></g></svg>`
+const chatOffIcon = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 32 32"><path d="M28 8v13h2V8a3.999 3.999 0 0 0-4-4H8.243l2 2H26a1.996 1.996 0 0 1 2 2z" fill="currentColor"></path><path d="M30 28.586L3.414 2L2 3.414l1.504 1.504A3.918 3.918 0 0 0 2 8v12a4 4 0 0 0 4 4h6v-2H6a1.996 1.996 0 0 1-2-2V8a1.981 1.981 0 0 1 .92-1.667L20.585 22H17l-4 7l1.736 1l3.429-6h4.42l6 6z" fill="currentColor"></path></svg>`
 
 const inputProps = computed<Record<string, unknown>>(() => ({
   onCompositionstart: handleCompositionStart,
@@ -282,6 +282,10 @@ watch(realTimeActive, (active) => {
     stopRealTimeInterval()
     lastSentValue.value = ''
   }
+  // 录制中切换模式时，同步 VAD 开关到 worklet
+  if (workletNode) {
+    workletNode.port.postMessage({ type: 'config', vadEnabled: active })
+  }
 })
 
 watch(pinned, (active) => {
@@ -323,9 +327,7 @@ const handleChange = (value: string) => {
 const handleKeydown = (e: KeyboardEvent) => {
   if (e.key === 'Enter' && e.ctrlKey) {
     e.preventDefault()
-    if (!realTimeActive.value) {
-      submit()
-    }
+    submit()
   }
 }
 
@@ -389,6 +391,13 @@ async function startASRRecording() {
         if (ws.readyState !== WebSocket.OPEN) return
         ws.send(event.data)
       }
+
+      // 发送 VAD 配置：仅实时模式启用 VAD，普通模式直接发送全部音频
+      workletNode.port.postMessage({
+        type: 'config',
+        energyThreshold: 0.003,
+        vadEnabled: realTimeActive.value,
+      })
 
       // 为了防止 Chromium 浏览器暂停无输出的音频图，
       // 将 worklet 输出连接到 muted GainNode → destination
@@ -570,7 +579,7 @@ function processText(input: string, cutCount: number = 2): string {
         <n-card>
           <n-input ref="inputInstRef" v-model:value="inputValue" type="textarea" :placeholder="placeholder"
             :input-props="inputProps" @input="handleChange" @keydown="handleKeydown"
-            :autosize="{ minRows: 5, maxRows: 10 }" />
+            :autosize="{ minRows: 5, maxRows: 10 }" :clearable="!realTimeActive" />
           <n-scrollbar x-scrollable trigger="none" style="margin-top: 1em">
             <n-form inline label-placement="left" label-width="auto" require-mark-placement="right-hanging">
               <n-form-item label="实时输入">
@@ -610,9 +619,7 @@ function processText(input: string, cutCount: number = 2): string {
                 <n-popover trigger="hover" placement="bottom">
                   <template #trigger>
                     <n-button @click="clearClick">
-                      <n-icon>
-                        <TrashOutline />
-                      </n-icon>
+                      <span v-html="chatOffIcon" style="display: flex; width: 14px; height: 14px"></span>
                     </n-button>
                   </template>
                   <span>清除</span>
@@ -656,7 +663,7 @@ function processText(input: string, cutCount: number = 2): string {
               </n-popover>
               <n-popover trigger="hover" placement="bottom">
                 <template #trigger>
-                  <n-button type="primary" @click="submit" :disabled="realTimeActive">
+                  <n-button type="primary" @click="submit">
                     <n-icon>
                       <Send />
                     </n-icon>

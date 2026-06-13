@@ -173,7 +173,7 @@ class Config:
 
         openai: CommentedMap = self._data["openai"]
         openai.yaml_set_comment_before_after_key(
-            "model", before="翻译使用的模型，如 gpt-4o", indent=2
+            "model", before="翻译使用的模型", indent=2
         )
         openai.yaml_set_comment_before_after_key(
             "api_base", before="翻译使用的 API 地址，OpenAI 格式", indent=2

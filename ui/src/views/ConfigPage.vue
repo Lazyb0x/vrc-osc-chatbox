@@ -54,7 +54,7 @@ const handleSave = async () => {
         </n-form-item>
 
         <n-form-item label="模型名称" path="openai.model">
-          <p class="desc">翻译使用的 AI 模型，如 gpt-4o</p>
+          <p class="desc">翻译使用的 AI 模型</p>
           <n-input v-model:value="config.openai.model" placeholder="gpt-4o" />
         </n-form-item>
 
