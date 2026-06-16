@@ -4,6 +4,7 @@ import os
 import shutil
 import subprocess
 import sys
+import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).parent
@@ -95,6 +96,22 @@ def build_pyinstaller():
         run(["uv", "sync"])
 
 
+def make_zip():
+    """将 dist 输出目录打包为 zip"""
+    from vrcchatbox import __version__
+
+    src_dir = ROOT / "dist" / f"vrc-chatbox-{__version__}"
+    zip_path = ROOT / "dist" / f"vrc-chatbox-{__version__}.zip"
+
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_LZMA) as zf:
+        for file in src_dir.rglob("*"):
+            arcname = file.relative_to(src_dir.parent)
+            zf.write(file, arcname)
+
+    size_mb = zip_path.stat().st_size / (1024 * 1024)
+    print(f"Zip created: {zip_path} ({size_mb:.1f} MB)")
+
+
 def main():
     print("=== Build Frontend ===")
     build_frontend()
@@ -104,8 +121,11 @@ def main():
     build_pyinstaller()
 
     print()
+    print("=== Zip ===")
+    make_zip()
+
+    print()
     print("Build complete!")
-    print(f"Output: {ROOT / 'dist' / 'vrc-chatbox'}")
 
 
 if __name__ == "__main__":

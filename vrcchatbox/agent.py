@@ -1,7 +1,10 @@
 import json
 import logging
 from dataclasses import dataclass
+from typing import cast
+
 from openai import AsyncOpenAI
+from openai.types.chat import ChatCompletionMessageFunctionToolCall
 
 from vrcchatbox.config import Config
 
@@ -137,6 +140,7 @@ class TranslateAgent:
                 return AgentResult(content=message.content or "No content available.")
 
             for tool_call in tool_calls:
+                tool_call = cast(ChatCompletionMessageFunctionToolCall, tool_call)
                 tool_name = tool_call.function.name
                 tool_args = json.loads(tool_call.function.arguments)
                 tool_function = TOOL_CALL_MAP.get(tool_name)
